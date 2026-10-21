@@ -239,7 +239,12 @@
   async function poll() {
     try {
       const r = await fetch('/api/share/' + id, { cache: 'no-store' });
-      if (r.status === 404) { showMsg('🔗', 'Nothing shared yet', "Nobody is sharing a trip on this link right now. This page will update by itself when they do."); return setTimeout(poll, 15000); }
+      if (r.status === 404) {
+        showMsg('🔗', 'Nothing shared yet', "Nobody is sharing a trip on this link right now. This page will update by itself when they do.");
+        $('who').textContent = 'Not sharing right now'; $('to').textContent = ''; $('stats').style.display = 'none';
+        $('progress').style.display = 'none'; $('statusText').textContent = 'Waiting for a trip on this link…'; $('dot').className = 'dot';
+        return setTimeout(poll, 15000);
+      }
       if (!r.ok) throw new Error(r.status);
       data = await r.json();
       // clock difference between this device and the server, so "updated x ago" is right
