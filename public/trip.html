@@ -57,8 +57,13 @@
     .dot.stale { background: var(--warn); }
     .dot.lost { background: var(--danger); }
     @keyframes pulse { 50% { opacity: .45; } }
-    #progress { height: 4px; background: #2F343C; border-radius: 3px; margin-top: 10px; overflow: hidden; }
-    #progress > div { height: 100%; width: 0; background: var(--green); transition: width .6s; }
+    /* trip progress: blue start flag, blue bar with a little car moving along it, chequered finish flag */
+    #progress { display: flex; align-items: center; gap: 6px; margin-top: 10px; }
+    #progress .flagIc { flex: none; width: 18px; height: 22px; }
+    #progress .track { position: relative; flex: 1; height: 6px; background: #2F343C; border-radius: 3px; }
+    #progress .fill { position: absolute; left: 0; top: 0; bottom: 0; width: 0; background: var(--accent); border-radius: 3px; transition: width .6s; }
+    #progress .car { position: absolute; top: 50%; left: 0; width: 26px; height: 16px; transform: translate(-50%, -50%); transition: left .6s;
+      filter: drop-shadow(0 1px 2px rgba(0,0,0,.6)); }
 
     #follow { position: fixed; right: 14px; bottom: calc(22px + env(safe-area-inset-bottom)); z-index: 1000;
       width: 50px; height: 50px; border-radius: 50%; border: 1px solid var(--border); background: rgba(23,26,31,.94);
@@ -116,7 +121,13 @@
       <div class="stat"><div class="v" id="left">--</div><div class="l">Time left</div></div>
       <div class="stat"><div class="v" id="dist">--</div><div class="l">Distance</div></div>
     </div>
-    <div id="progress"><div></div></div>
+    <div id="progress">
+      <svg class="flagIc" viewBox="0 0 18 22" aria-label="Start"><line x1="3" y1="2" x2="3" y2="21" stroke="#fff" stroke-width="2" stroke-linecap="round"/><path d="M4 2.5c4-1.6 8 1.6 12 .3v8.4c-4 1.4-8-1.8-12-.2Z" fill="#3B9EFF"/></svg>
+      <div class="track"><div class="fill"></div>
+        <svg class="car" viewBox="0 0 26 16" aria-label="Car"><rect x="1" y="2" width="24" height="12" rx="4" fill="#3B9EFF" stroke="#fff" stroke-width="1.5"/><rect x="14" y="4" width="5" height="8" rx="1.5" fill="#9FD3F5"/><rect x="4" y="4.5" width="4" height="7" rx="1.2" fill="#5E7F96"/><circle cx="23.5" cy="4.5" r="1" fill="#FFF59D"/><circle cx="23.5" cy="11.5" r="1" fill="#FFF59D"/></svg>
+      </div>
+      <svg class="flagIc" viewBox="0 0 18 22" aria-label="Finish"><defs><pattern id="chq" width="4" height="4" patternUnits="userSpaceOnUse"><rect width="4" height="4" fill="#fff"/><rect width="2" height="2" fill="#111"/><rect x="2" y="2" width="2" height="2" fill="#111"/></pattern></defs><line x1="3" y1="2" x2="3" y2="21" stroke="#fff" stroke-width="2" stroke-linecap="round"/><path d="M4 2.5h12.5v8.5H4Z" fill="url(#chq)" stroke="#fff" stroke-width=".8"/></svg>
+    </div>
     <div id="status"><span class="dot" id="dot"></span><span id="statusText">Connecting…</span></div>
   </div>
 
@@ -253,7 +264,9 @@
       const ll = a => a.map(p => [p[1], p[0]]);
       map.getSource('nv-done').setData(line(ll(routePts.slice(0, k + 1).concat([here]))));
       map.getSource('nv-todo').setData(line(ll([here].concat(routePts.slice(k + 1)))));
-      $('progress').firstElementChild.style.width = Math.round(k / (routePts.length - 1) * 100) + '%';
+      const pct = Math.round(k / (routePts.length - 1) * 100) + '%';
+      $('progress').querySelector('.fill').style.width = pct;
+      $('progress').querySelector('.car').style.left = pct;
     } else {
       map.getSource('nv-done').setData(emptyLine()); map.getSource('nv-todo').setData(emptyLine());
     }
