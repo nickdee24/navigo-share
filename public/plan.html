@@ -239,13 +239,15 @@
   const byClass = route => ['match', ['get', 'class'],
     ['motorway', 'motorway_link', 'trunk', 'trunk_link'], route ? C.MOTORWAY_ROUTE : C.MOTORWAY,
     ['primary', 'primary_link', 'secondary', 'secondary_link', 'tertiary', 'tertiary_link'], C.MAIN,
-    ['path', 'pedestrian', 'track', 'major_rail', 'minor_rail', 'service_rail'], C.PATH, C.MINOR];
+    ['path', 'pedestrian', 'track', 'major_rail', 'minor_rail', 'service_rail'], 'rgba(0,0,0,0)', C.MINOR];
   function paint(id, prop, v) { try { map.setPaintProperty(id, prop, v); } catch (e) { /* layer doesn't have it */ } }
   function truckDash(routeShown) {
     for (const l of map.getStyle().layers) {
       const id = l.id;
       if (id.startsWith('nv-')) continue;
-      if (id.includes('building')) { try { map.setLayoutProperty(id, 'visibility', 'none'); } catch (e) {} continue; }   // buildings blend into the ground
+      // buildings blend into the ground; footpaths, cycle paths, steps, tracks and railways are hidden: just roads
+      if (id.includes('building') || /path|steps|pedestrian|track|cycleway|piste|rail|ferry|aerialway|golf/.test(id) && !/label/.test(id) || /road-path|path-label|rail-label|transit/.test(id)) {
+        try { map.setLayoutProperty(id, 'visibility', 'none'); } catch (e) {} continue; }
       if (l.type === 'background') paint(id, 'background-color', C.LAND);
       else if (l.type === 'fill') {
         if (id === 'land') paint(id, 'fill-color', C.LAND);
@@ -296,7 +298,8 @@
     map.addLayer({ id: 'nv-main', type: 'line', source: 'nv-routes', filter: ['==', ['get', 'sel'], true],
       layout: { 'line-join': 'round', 'line-cap': 'round' }, paint: { 'line-color': '#3B9EFF', 'line-width': w(1) } }, firstLabel());
     map.addLayer({ id: 'nv-cong', type: 'line', source: 'nv-cong',
-      layout: { 'line-join': 'round', 'line-cap': 'round' }, paint: { 'line-color': ['get', 'c'], 'line-width': ['case', ['get', 'sel'], w(1), w(.8)] } }, firstLabel());
+      layout: { 'line-join': 'round', 'line-cap': 'round' }, paint: { 'line-color': ['get', 'c'], 'line-width': ['interpolate', ['exponential', 1.5], ['zoom'],
+        8, ['case', ['get', 'sel'], 3, 2.4], 12, ['case', ['get', 'sel'], 6, 4.8], 16, ['case', ['get', 'sel'], 14, 11.2]] } }, firstLabel());
     map.on('click', 'nv-alt', e => { const i = e.features[0].properties.i; if (i != null) select(+i); });
     map.on('mouseenter', 'nv-alt', () => map.getCanvas().style.cursor = 'pointer');
     map.on('mouseleave', 'nv-alt', () => map.getCanvas().style.cursor = '');
