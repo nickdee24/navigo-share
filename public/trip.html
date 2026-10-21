@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#0D0F12">
   <title>Live trip</title>
   <link rel="icon" href="/icon.svg">
-  <link rel="stylesheet" href="/vendor/leaflet.css">
+  <link rel="stylesheet" href="https://api.mapbox.com/mapbox-gl-js/v3.9.0/mapbox-gl.css">
   <style>
     :root {
       --bg: #0D0F12; --panel: #171A1F; --alt: #23262C; --border: #2C3038;
@@ -17,10 +17,8 @@
     html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
       font: 15px/1.35 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
     #map { position: fixed; inset: 0; background: #2B2F36; }
-    .leaflet-container { background: #2B2F36; }
+    .mapboxgl-ctrl-attrib { background: rgba(13,15,18,.7) !important; }
     .dark-tiles { filter: invert(1) hue-rotate(180deg) brightness(.85) contrast(.9) saturate(.4); }
-    .leaflet-control-attribution { background: rgba(13,15,18,.7) !important; color: var(--muted) !important; font-size: 10px; }
-    .leaflet-control-attribution a { color: var(--muted) !important; }
 
     #card { position: fixed; left: 12px; right: 12px; top: calc(12px + env(safe-area-inset-top)); max-width: 480px; margin: 0 auto;
       background: rgba(23,26,31,.94); border: 1px solid var(--border); border-radius: 14px; padding: 12px 14px;
@@ -127,8 +125,9 @@
 
   <div id="msg"><div class="box"><div style="font-size:36px" id="msgIcon">🔗</div><h2 id="msgTitle"></h2><p id="msgText"></p></div></div>
 
-  <script src="/vendor/leaflet.js"></script>
+  <script src="https://api.mapbox.com/mapbox-gl-js/v3.9.0/mapbox-gl.js"></script>
   <script src="/config.js"></script>
+  <script src="/td-map.js"></script>
   <script>
   'use strict';
   const id = location.pathname.split('/').filter(Boolean)[1];
@@ -136,23 +135,32 @@
     '😴': 'Tired', '🥳': 'Celebrating', '🤔': 'Thinking', '😌': 'Chilled', '🤬': 'Raging', '🥶': 'Freezing' };
   const $ = s => document.getElementById(s);
 
-  const map = L.map('map', { zoomControl: false, attributionControl: true }).setView([53.55, -2.63], 12);
-  // Mapbox's dark map (same maps as the NaviGO app) when the site has a MAPBOX_TOKEN set on Render;
-  // otherwise OpenStreetMap's free map, darkened to match.
-  if (window.MAPBOX_TOKEN) {
-    L.tileLayer('https://api.mapbox.com/styles/v1/mapbox/dark-v11/tiles/512/{z}/{x}/{y}@2x?access_token=' + window.MAPBOX_TOKEN, {
-      tileSize: 512, zoomOffset: -1, maxZoom: 20,
-      attribution: '&copy; <a href="https://www.mapbox.com/about/maps/">Mapbox</a> &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-    }).addTo(map);
-  } else {
-    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      maxZoom: 19, className: 'dark-tiles',
-      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-    }).addTo(map);
-  }
+  // The same Mapbox map as the NaviGO app, in Truck Dash colours (td-map.js)
+  mapboxgl.accessToken = window.MAPBOX_TOKEN;
+  const map = new mapboxgl.Map({ container: 'map', style: 'mapbox://styles/mapbox/dark-v11', center: [-2.63, 53.55], zoom: 11,
+    dragRotate: false, pitchWithRotate: false });
+  map.touchZoomRotate.disableRotation();
+  let mapReady = false;
+  const emptyLine = () => ({ type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: [] } });
+  map.on('style.load', () => {
+    TDMap.apply(map, true);
+    const lbl = (map.getStyle().layers.find(l => l.type === 'symbol') || {}).id;
+    const w = k => ['interpolate', ['exponential', 1.5], ['zoom'], 8, 3 * k, 12, 6 * k, 16, 14 * k];
+    map.addSource('nv-done', { type: 'geojson', data: emptyLine() });
+    map.addSource('nv-todo', { type: 'geojson', data: emptyLine() });
+    map.addLayer({ id: 'nv-done', type: 'line', source: 'nv-done', layout: { 'line-join': 'round', 'line-cap': 'round' },
+      paint: { 'line-color': '#8A94A6', 'line-width': w(1), 'line-opacity': .6 } }, lbl);
+    map.addLayer({ id: 'nv-todo-case', type: 'line', source: 'nv-todo', layout: { 'line-join': 'round', 'line-cap': 'round' },
+      paint: { 'line-color': '#0D0F12', 'line-width': w(1.45) } }, lbl);
+    map.addLayer({ id: 'nv-todo', type: 'line', source: 'nv-todo', layout: { 'line-join': 'round', 'line-cap': 'round' },
+      paint: { 'line-color': '#3B9EFF', 'line-width': w(1) } }, lbl);
+    mapReady = true; routeV = -1;
+    if (data) { drawRoute(data); drawMe(data); }
+  });
+  const flagSvg = '<svg viewBox="0 0 34 44" width="34" height="44"><ellipse cx="7" cy="42" rx="5" ry="2" fill="rgba(0,0,0,.4)"/><line x1="7" y1="4" x2="7" y2="42" stroke="#0D0F12" stroke-width="5" stroke-linecap="round"/><line x1="7" y1="4" x2="7" y2="42" stroke="#fff" stroke-width="2.6" stroke-linecap="round"/><path d="M8 4c8-3 16 4 24 1v16c-8 3-16-4-24-1Z" fill="#FF4D4D" stroke="#fff" stroke-width="1.8" stroke-linejoin="round"/></svg>';
 
   let follow = true, first = true, wasEnded = false, data = null, routeV = -1, photoV = -1;
-  let routePts = [], doneLine = null, todoCase = null, todoLine = null, me = null, flag = null;
+  let routePts = [], me = null, flag = null;
 
   $('follow').onclick = () => { follow = !follow; $('follow').classList.toggle('on', follow); if (follow) centre(true); };
   map.on('dragstart', () => { follow = false; $('follow').classList.remove('on'); });
@@ -189,15 +197,16 @@
 
   function drawMe(t) {
     if (t.lat == null || t.endedAt) return;
-    const ll = [t.lat, t.lng];
-    if (!me || photoV !== t.photoV) {
-      photoV = t.photoV;
-      const icon = L.divIcon({ className: '', iconSize: [56, 56], iconAnchor: [28, 28],
-        html: '<div class="me"><div class="np"><span class="tag"></span><span class="st"></span><span class="txt"></span><span class="time"></span></div>' +
-          '<div class="arrow"></div><div class="face">' + faceHtml(t) + '</div></div>' });
-      if (me) me.setIcon(icon); else me = L.marker(ll, { icon, zIndexOffset: 1000 }).addTo(map);
+    const ll = [t.lng, t.lat];
+    if (!me) {
+      const el = document.createElement('div'); el.style.zIndex = 5;
+      el.innerHTML = '<div class="me"><div class="np"><span class="tag"></span><span class="st"></span><span class="txt"></span><span class="time"></span></div>' +
+        '<div class="arrow"></div><div class="face"></div></div>';
+      me = new mapboxgl.Marker({ element: el }).setLngLat(ll).addTo(map);
+      photoV = -1;
     }
-    me.setLatLng(ll);
+    if (photoV !== t.photoV) { photoV = t.photoV; me.getElement().querySelector('.face').innerHTML = faceHtml(t); }
+    me.setLngLat(ll);
     const el = me.getElement();
     if (el) {
       const arrow = el.querySelector('.arrow');
@@ -233,41 +242,37 @@
   map.on('move', () => { const np = me && me.getElement() && me.getElement().querySelector('.np.show'); if (np) fitPill(np); });
 
   function drawRoute(t) {
-    if (t.routeV !== routeV) {
-      routeV = t.routeV;
-      routePts = t.route || [];
-      [doneLine, todoCase, todoLine].forEach(l => l && map.removeLayer(l));
-      doneLine = todoCase = todoLine = null;
-      if (routePts.length > 1) {
-        doneLine = L.polyline([], { color: '#8A94A6', weight: 6, opacity: .6 }).addTo(map);
-        todoCase = L.polyline([], { color: '#0D0F12', weight: 10, opacity: .9 }).addTo(map);
-        todoLine = L.polyline([], { color: '#3B9EFF', weight: 6 }).addTo(map);
-      }
-    }
+    if (!mapReady) return;
+    if (t.routeV !== routeV) { routeV = t.routeV; routePts = t.route || []; }
+    const line = c => ({ type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: c } });
     if (routePts.length > 1) {
       // Split the route where they are: driven part grey, the rest blue.
       let k = 0;
       if (t.lat != null) { let best = Infinity; routePts.forEach((p, i) => { const d = sq(p, [t.lat, t.lng]); if (d < best) { best = d; k = i; } }); }
       const here = t.lat != null ? [t.lat, t.lng] : routePts[0];
-      doneLine.setLatLngs(routePts.slice(0, k + 1).concat([here]));
-      const rest = [here].concat(routePts.slice(k + 1));
-      todoCase.setLatLngs(rest); todoLine.setLatLngs(rest);
+      const ll = a => a.map(p => [p[1], p[0]]);
+      map.getSource('nv-done').setData(line(ll(routePts.slice(0, k + 1).concat([here]))));
+      map.getSource('nv-todo').setData(line(ll([here].concat(routePts.slice(k + 1)))));
       $('progress').firstElementChild.style.width = Math.round(k / (routePts.length - 1) * 100) + '%';
+    } else {
+      map.getSource('nv-done').setData(emptyLine()); map.getSource('nv-todo').setData(emptyLine());
     }
     if (t.dest) {
-      const ll = [t.dest.lat, t.dest.lng];
-      if (!flag) flag = L.marker(ll, { icon: L.divIcon({ className: '', html: '<div class="flag">🚩</div>', iconSize: [30, 30], iconAnchor: [6, 28] }) }).addTo(map);
-      else flag.setLatLng(ll);
-    } else if (flag) { map.removeLayer(flag); flag = null; }
+      const ll = [t.dest.lng, t.dest.lat];
+      if (!flag) { const el = document.createElement('div'); el.innerHTML = flagSvg;
+        flag = new mapboxgl.Marker({ element: el, anchor: 'bottom-left', offset: [-7, 0] }).setLngLat(ll).addTo(map); }
+      else flag.setLngLat(ll);
+    } else if (flag) { flag.remove(); flag = null; }
   }
   function centre(animate) {
     if (!data || data.lat == null) return;
     if (first && data.dest) {
-      const b = L.latLngBounds([[data.lat, data.lng], [data.dest.lat, data.dest.lng]]);
-      if (routePts.length) routePts.forEach(p => b.extend(p));
-      map.fitBounds(b, { paddingTopLeft: [30, 230], paddingBottomRight: [30, 40] });
-    } else if (first) map.setView([data.lat, data.lng], 15);
-    else map.panTo([data.lat, data.lng], { animate });
+      const b = new mapboxgl.LngLatBounds([data.lng, data.lat], [data.lng, data.lat]);
+      b.extend([data.dest.lng, data.dest.lat]);
+      routePts.forEach(p => b.extend([p[1], p[0]]));
+      map.fitBounds(b, { padding: { top: 250, left: 40, right: 40, bottom: 50 }, duration: 0 });
+    } else if (first) map.jumpTo({ center: [data.lng, data.lat], zoom: 15 });
+    else map.panTo([data.lng, data.lat], { duration: animate ? 800 : 0 });
     first = false;
   }
 
@@ -326,7 +331,7 @@
       $('who').textContent = t.name + (t.arrived ? ' has arrived' : " isn't sharing right now");
       $('to').innerHTML = t.arrived && t.lastDest ? 'At <b></b>' : 'Their location is hidden until they share a trip again';
       if (t.arrived && t.lastDest) $('to').querySelector('b').textContent = t.lastDest;
-      if (me) { map.removeLayer(me); me = null; }
+      if (me) { me.remove(); me = null; }
     }
   }
 
