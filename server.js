@@ -146,12 +146,51 @@ function updatePlace(t) {
   placeName(at[0], at[1]).then(p => { if (p) { t.place = p; t.placeAt = at; } }).finally(() => { t.placeBusy = false; });
 }
 
+// ---------- music search for NaviGO's player (Spotify Web API, app-only login: no user account needed) ----------
+// Set SPOTIFY_CLIENT_ID and SPOTIFY_CLIENT_SECRET in Render → Environment (from developer.spotify.com/dashboard).
+let spotifyToken = null, spotifyTokenUntil = 0;
+async function spotifyAuth() {
+  if (spotifyToken && Date.now() < spotifyTokenUntil) return spotifyToken;
+  const id = process.env.SPOTIFY_CLIENT_ID, secret = process.env.SPOTIFY_CLIENT_SECRET;
+  if (!id || !secret) return null;
+  const r = await fetch('https://accounts.spotify.com/api/token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded', Authorization: 'Basic ' + Buffer.from(id + ':' + secret).toString('base64') },
+    body: 'grant_type=client_credentials'
+  });
+  if (!r.ok) throw new Error('Spotify login failed (' + r.status + ')');
+  const j = await r.json();
+  spotifyToken = j.access_token; spotifyTokenUntil = Date.now() + (j.expires_in - 60) * 1000;
+  return spotifyToken;
+}
+async function musicSearch(q) {
+  const token = await spotifyAuth();
+  if (!token) return { error: 'not-set-up' };
+  const u = 'https://api.spotify.com/v1/search?type=track,artist&limit=15&market=GB&q=' + encodeURIComponent(q);
+  const r = await fetch(u, { headers: { Authorization: 'Bearer ' + token } });
+  if (r.status === 401) { spotifyToken = null; return musicSearch(q); }
+  if (!r.ok) throw new Error('Spotify search failed (' + r.status + ')');
+  const j = await r.json();
+  const img = imgs => { const s = (imgs || []).slice().sort((a, b) => (a.width || 0) - (b.width || 0)); return (s.find(i => (i.width || 0) >= 64) || s[s.length - 1] || {}).url || null; };
+  return {
+    artists: ((j.artists && j.artists.items) || []).slice(0, 3).map(a => ({ name: a.name, uri: a.uri, image: img(a.images) })),
+    tracks: ((j.tracks && j.tracks.items) || []).map(t => ({ name: t.name, uri: t.uri, artists: t.artists.map(a => a.name).join(', '),
+      album: t.album && t.album.name, image: img(t.album && t.album.images), durationMs: t.duration_ms }))
+  };
+}
+
 // ---------- http ----------
 const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css', '.png': 'image/png', '.svg': 'image/svg+xml' };
 
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, 'http://x');
   if (url.pathname === '/health') return json(res, 200, { ok: true });
+  if (url.pathname === '/api/music/search') {
+    const q = String(url.searchParams.get('q') || '').trim().slice(0, 100);
+    if (!q) return json(res, 400, { error: 'Type something to search for' });
+    try { const r = await musicSearch(q); return json(res, r.error ? 503 : 200, r); }
+    catch (e) { return json(res, 502, { error: e.message }); }
+  }
   if (url.pathname === '/config.js') {
     res.writeHead(200, { 'Content-Type': MIME['.js'], 'Cache-Control': 'no-cache' });
     return res.end('window.MAPBOX_TOKEN = ' + JSON.stringify(MAPBOX_TOKEN) + ';');
