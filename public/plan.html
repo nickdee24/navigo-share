@@ -1,0 +1,665 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0D0F12">
+  <title>NaviGO Trip Planner</title>
+  <link rel="icon" href="/icon.svg">
+  <link rel="stylesheet" href="https://api.mapbox.com/mapbox-gl-js/v3.9.0/mapbox-gl.css">
+  <style>
+    :root {
+      --bg: #0D0F12; --panel: #171A1F; --alt: #23262C; --card: #1D2127; --border: #2C3038;
+      --accent: #3B9EFF; --danger: #FF4D4D; --green: #4CAF50; --warn: #FFB020;
+      --text: #EEEEEE; --muted: #9AA4B2; --overlay: rgba(23,26,31,.96);
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
+      font: 14px/1.35 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; overflow: hidden; }
+    button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; }
+    input { font: inherit; color: var(--text); }
+    #map { position: fixed; inset: 0; background: #2B2F36; }
+    .mapboxgl-ctrl-attrib { background: rgba(13,15,18,.7) !important; }
+    .mapboxgl-ctrl-attrib a { color: var(--muted) !important; }
+
+    /* ---------- the panel on the left ---------- */
+    #panel { position: fixed; left: 10px; top: 10px; bottom: 10px; width: 380px; display: flex; flex-direction: column;
+      background: var(--overlay); border: 1px solid var(--border); border-radius: 14px; box-shadow: 0 10px 30px rgba(0,0,0,.5);
+      z-index: 10; overflow: hidden; transition: bottom .25s; }
+    #panel.compact { bottom: auto; }
+    .head { display: flex; align-items: center; gap: 8px; padding: 12px 14px 4px; }
+    .head h1 { flex: 1; margin: 0; font-size: 17px; font-weight: 700; text-align: center; padding-right: 34px; }
+    .head h1 b { color: var(--accent); }
+    .iconbtn { width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; color: var(--muted); flex: none; }
+    .iconbtn:hover { background: var(--alt); color: var(--text); }
+    .iconbtn svg { width: 20px; height: 20px; }
+
+    .points { position: relative; display: grid; grid-template-columns: 30px 1fr 36px; gap: 8px 4px; padding: 8px 12px 6px; align-items: center; }
+    .dot { width: 30px; display: grid; place-items: center; }
+    .dot .start { width: 16px; height: 16px; border-radius: 50%; border: 4px solid var(--accent); background: #fff0; box-shadow: 0 0 0 2px rgba(59,158,255,.25); }
+    .dots { position: absolute; left: 26px; top: 40px; height: 22px; border-left: 3px dotted #4A5058; }
+    .field { position: relative; }
+    .field input { width: 100%; padding: 10px 34px 10px 12px; border-radius: 9px; border: 1px solid var(--border); background: var(--alt); outline: none; }
+    .field input:focus { border-color: var(--accent); }
+    .field input::placeholder { color: var(--muted); }
+    .field .clear { position: absolute; right: 6px; top: 50%; transform: translateY(-50%); width: 24px; height: 24px; border-radius: 50%;
+      color: var(--muted); display: none; place-items: center; }
+    .field.has .clear { display: grid; }
+    .field .search { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); color: var(--muted); pointer-events: none; }
+    .field.has .search { display: none; }
+    #swap { grid-row: 1 / span 2; grid-column: 3; }
+
+    #suggest { display: none; border-top: 1px solid var(--border); max-height: 330px; overflow: auto; }
+    #suggest.show { display: block; }
+    .sug { display: flex; align-items: center; gap: 12px; width: 100%; padding: 11px 16px; text-align: left; border-bottom: 1px solid #22262C; }
+    .sug:hover, .sug.on { background: var(--alt); }
+    .sug .ic { color: var(--muted); flex: none; }
+    .sug .ic.me { color: var(--accent); }
+    .sug .t { font-weight: 700; }
+    .sug .s { color: var(--muted); margin-left: 4px; }
+    .sug .tx { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+    .when { display: flex; align-items: center; gap: 10px; padding: 10px 16px 12px; border-top: 1px solid var(--border); margin-top: 6px; position: relative; }
+    .when .ic { color: var(--muted); }
+    #whenBtn { display: flex; align-items: center; gap: 4px; font-weight: 600; padding: 4px 6px; border-radius: 6px; }
+    #whenBtn:hover { background: var(--alt); }
+    #whenTime { display: none; padding: 5px 8px; border-radius: 7px; border: 1px solid var(--border); background: var(--alt); color-scheme: dark; }
+    #whenTime.show { display: block; }
+    .menu { position: absolute; display: none; min-width: 200px; background: var(--card); border: 1px solid var(--border); border-radius: 10px;
+      box-shadow: 0 8px 24px rgba(0,0,0,.55); padding: 6px 0; z-index: 30; }
+    .menu.show { display: block; }
+    .menu button { display: block; width: 100%; text-align: left; padding: 10px 16px; }
+    .menu button:hover { background: var(--alt); }
+    #whenMenu { left: 52px; top: 44px; }
+
+    .actions { display: none; align-items: center; justify-content: space-between; padding: 10px 14px; border-top: 1px solid var(--border); }
+    .actions.show { display: flex; }
+    .round { width: 42px; height: 42px; border-radius: 50%; display: grid; place-items: center; background: var(--alt); color: var(--accent); }
+    .round:hover { background: #2C3038; }
+    .primary { padding: 11px 20px; border-radius: 22px; background: var(--accent); color: #fff; font-weight: 700; }
+    .primary:hover { filter: brightness(1.1); }
+
+    #body { flex: 1; overflow: auto; border-top: 6px solid var(--bg); }
+    #body:empty { display: none; }
+    .sect { padding: 12px 16px 6px; color: var(--muted); font-size: 13px; }
+    .route { position: relative; display: grid; grid-template-columns: 30px 1fr; gap: 2px 10px; width: 100%; text-align: left;
+      padding: 13px 16px 13px 14px; border-top: 1px solid var(--border); border-left: 4px solid transparent; }
+    .route:hover { background: rgba(255,255,255,.03); }
+    .route.sel { background: rgba(59,158,255,.08); border-left-color: var(--accent); }
+    .route .n { width: 24px; height: 24px; border-radius: 50%; background: #4A5058; color: #fff; font-size: 12px; font-weight: 700;
+      display: grid; place-items: center; margin-top: 2px; }
+    .route.sel .n { background: var(--accent); }
+    .route .top { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+    .route .dur { font-size: 19px; font-weight: 800; }
+    .route .arr { font-size: 13px; font-weight: 600; }
+    .route .badge { margin-left: auto; font-size: 10px; font-weight: 800; padding: 2px 7px; border-radius: 4px; background: var(--accent); color: #fff; }
+    .route .via { grid-column: 2; color: var(--text); font-size: 13px; }
+    .route .meta { grid-column: 2; display: flex; gap: 10px; color: var(--muted); font-size: 12px; margin-top: 2px; }
+    .tr0 { color: var(--green); } .tr1 { color: var(--warn); } .tr2 { color: var(--danger); }
+
+    .tabs { display: flex; gap: 22px; padding: 0 16px; border-top: 6px solid var(--bg); }
+    .tabs button { padding: 13px 4px 10px; color: var(--muted); border-bottom: 2px solid transparent; }
+    .tabs button.on { color: var(--text); border-bottom-color: var(--accent); }
+    .info { padding: 12px 16px 16px; }
+    .info .co { font-size: 18px; font-weight: 700; font-variant-numeric: tabular-nums; }
+    .info .ad { color: var(--muted); margin-top: 2px; }
+    .info .btns { display: flex; gap: 8px; margin-top: 10px; }
+    .info .btns .round { width: 38px; height: 38px; }
+    .hint { padding: 16px; color: var(--muted); }
+    .err { padding: 16px; color: var(--danger); }
+    .loading { padding: 18px 16px; color: var(--muted); display: flex; align-items: center; gap: 10px; }
+    .spin { width: 18px; height: 18px; border-radius: 50%; border: 2px solid var(--alt); border-top-color: var(--accent); animation: spin .8s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ---------- right-click menu ---------- */
+    #ctx { position: fixed; display: none; width: 260px; background: var(--card); border: 1px solid var(--border); border-radius: 12px;
+      box-shadow: 0 10px 28px rgba(0,0,0,.6); z-index: 40; overflow: hidden; }
+    #ctx.show { display: block; }
+    #ctx .h { display: flex; align-items: center; gap: 10px; padding: 12px 14px; }
+    #ctx .pin { width: 34px; height: 34px; border-radius: 8px; background: rgba(255,77,77,.15); display: grid; place-items: center; flex: none; }
+    #ctx .nm { font-weight: 800; }
+    #ctx .sub { color: var(--muted); font-size: 12px; }
+    #ctx button { display: block; width: 100%; text-align: left; padding: 10px 16px; }
+    #ctx button:hover { background: var(--alt); }
+
+    /* ---------- map buttons (bottom right) ---------- */
+    #ctrls { position: fixed; right: 12px; bottom: 28px; display: flex; flex-direction: column; gap: 10px; z-index: 5; }
+    .mbtn { width: 44px; height: 44px; border-radius: 50%; background: var(--overlay); border: 1px solid var(--border); color: var(--text);
+      display: grid; place-items: center; box-shadow: 0 4px 12px rgba(0,0,0,.45); }
+    .mbtn:hover { color: var(--accent); }
+    .mbtn.on { color: #fff; background: var(--accent); border-color: var(--accent); }
+    .mbtn svg { width: 20px; height: 20px; }
+    .zoom { display: flex; flex-direction: column; border-radius: 22px; overflow: hidden; background: var(--overlay); border: 1px solid var(--border);
+      box-shadow: 0 4px 12px rgba(0,0,0,.45); }
+    .zoom button { width: 44px; height: 42px; font-size: 22px; display: grid; place-items: center; }
+    .zoom button:hover { color: var(--accent); }
+    .zoom button + button { border-top: 1px solid var(--border); }
+
+    #toast { position: fixed; left: 50%; bottom: 30px; transform: translateX(-50%) translateY(20px); opacity: 0; transition: .25s;
+      background: var(--card); border: 1px solid var(--border); padding: 10px 16px; border-radius: 22px; z-index: 50; pointer-events: none; }
+    #toast.show { opacity: 1; transform: translateX(-50%); }
+
+    /* markers */
+    .mk-start { width: 22px; height: 22px; border-radius: 50%; background: var(--accent); border: 4px solid #fff; box-shadow: 0 0 0 3px rgba(59,158,255,.35), 0 3px 8px rgba(0,0,0,.6); cursor: grab; }
+    .mk-flag { width: 34px; height: 44px; cursor: grab; }
+    .mk-me { width: 18px; height: 18px; border-radius: 50%; background: var(--accent); border: 3px solid #fff; box-shadow: 0 0 0 8px rgba(59,158,255,.2); }
+    .mk-pin { width: 26px; height: 34px; }
+
+    /* phones: the panel becomes a sheet at the top */
+    @media (max-width: 700px) {
+      #panel { left: 8px; right: 8px; width: auto; top: 8px; bottom: auto; max-height: 62vh; }
+      #ctrls { bottom: 24px; }
+    }
+  </style>
+</head>
+<body>
+  <div id="map"></div>
+
+  <div id="panel" class="compact">
+    <div class="head">
+      <button class="iconbtn" id="collapse" title="Show / hide the panel">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+      </button>
+      <h1>Driving directions</h1>
+    </div>
+    <div id="panelBody">
+      <div class="points">
+        <div class="dots"></div>
+        <div class="dot"><div class="start"></div></div>
+        <div class="field" id="fFrom"><input id="from" placeholder="Choose starting point" autocomplete="off">
+          <span class="search"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg></span>
+          <button class="clear" title="Clear">✕</button></div>
+        <button class="iconbtn" id="swap" title="Swap start and destination">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 4v15M4 15l4 4 4-4M16 20V5M12 9l4-4 4 4"/></svg>
+        </button>
+        <div class="dot"><svg width="22" height="26" viewBox="0 0 24 28"><path d="M12 1C6.5 1 2 5.3 2 10.8 2 18 12 27 12 27s10-9 10-16.2C22 5.3 17.5 1 12 1Z" fill="none" stroke="#FF4D4D" stroke-width="2.4"/><circle cx="12" cy="11" r="3.6" fill="#FF4D4D"/></svg></div>
+        <div class="field" id="fTo"><input id="to" placeholder="Choose destination" autocomplete="off">
+          <span class="search"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg></span>
+          <button class="clear" title="Clear">✕</button></div>
+      </div>
+      <div id="suggest"></div>
+      <div class="when">
+        <span class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></span>
+        <button id="whenBtn"><span id="whenLabel">Leave now</span> <span>▾</span></button>
+        <input type="datetime-local" id="whenTime">
+        <div class="menu" id="whenMenu">
+          <button data-w="now">Leave now</button>
+          <button data-w="depart">Leave at</button>
+          <button data-w="arrive">Arrive at</button>
+        </div>
+      </div>
+      <div class="actions" id="actions">
+        <button class="round" id="shareRoute" title="Share this route">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="18" cy="5" r="2.6"/><circle cx="6" cy="12" r="2.6"/><circle cx="18" cy="19" r="2.6"/><path d="m8.3 10.8 7.4-4.4M8.3 13.2l7.4 4.4"/></svg>
+        </button>
+        <button class="primary" id="copyRoute">Copy route link</button>
+      </div>
+    </div>
+    <div id="body"></div>
+  </div>
+
+  <div id="ctx">
+    <div class="h">
+      <div class="pin"><svg width="18" height="22" viewBox="0 0 24 28"><path d="M12 1C6.5 1 2 5.3 2 10.8 2 18 12 27 12 27s10-9 10-16.2C22 5.3 17.5 1 12 1Z" fill="#FF4D4D"/><circle cx="12" cy="11" r="3.8" fill="#fff"/></svg></div>
+      <div><div class="nm" id="ctxName">Finding this place…</div><div class="sub" id="ctxSub"></div></div>
+    </div>
+    <button data-a="share">Share</button>
+    <button data-a="centre">Set as map centre</button>
+    <button data-a="from">Set as starting point</button>
+    <button data-a="to">Set as destination</button>
+  </div>
+
+  <div id="ctrls">
+    <button class="mbtn on" id="traffic" title="Live traffic">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="7" y="2" width="10" height="20" rx="3"/><circle cx="12" cy="7" r="1.6" fill="currentColor"/><circle cx="12" cy="12" r="1.6" fill="currentColor"/><circle cx="12" cy="17" r="1.6" fill="currentColor"/></svg>
+    </button>
+    <button class="mbtn" id="locate" title="Show where I am">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="2.5" fill="currentColor"/><path d="M12 1v4M12 19v4M1 12h4M19 12h4"/></svg>
+    </button>
+    <div class="zoom"><button id="zin" title="Zoom in">+</button><button id="zout" title="Zoom out">−</button></div>
+  </div>
+
+  <div id="toast"></div>
+
+  <script src="https://api.mapbox.com/mapbox-gl-js/v3.9.0/mapbox-gl.js"></script>
+  <script src="/config.js"></script>
+  <script>
+  'use strict';
+  const $ = s => document.getElementById(s);
+  const TOKEN = window.MAPBOX_TOKEN;
+  if (!TOKEN) { document.body.innerHTML = '<p style="padding:20px">The planner needs MAPBOX_TOKEN set on the server.</p>'; throw new Error('no token'); }
+  mapboxgl.accessToken = TOKEN;
+
+  // ---------- Truck Dash colours (same as the NaviGO app) ----------
+  const C = { LAND: '#2B2F36', URBAN: '#343A44', PARK: '#3D5238', WATER: '#16283F', RIVER: '#1E3350', MINOR: '#7D838C',
+    MAIN: '#CBD0D6', MOTORWAY: '#FF8A3D', MOTORWAY_ROUTE: '#E3E6EA', CASE: '#1C1F24', PATH: '#575E68', BORDER: '#575E68',
+    TOWN: '#FFFFFF', ROADLABEL: '#CBD0D6', MINORLABEL: '#9AA4B2', WATERLABEL: '#5A9EC4', HALO: '#0D0F12' };
+  const isRoad = id => /^(road|bridge|tunnel)-/.test(id) && !/label|shield|number|exit/.test(id);
+  const isMotorway = id => /motorway|trunk/.test(id);
+  const byClass = route => ['match', ['get', 'class'],
+    ['motorway', 'motorway_link', 'trunk', 'trunk_link'], route ? C.MOTORWAY_ROUTE : C.MOTORWAY,
+    ['primary', 'primary_link', 'secondary', 'secondary_link', 'tertiary', 'tertiary_link'], C.MAIN,
+    ['path', 'pedestrian', 'track', 'major_rail', 'minor_rail', 'service_rail'], C.PATH, C.MINOR];
+  function paint(id, prop, v) { try { map.setPaintProperty(id, prop, v); } catch (e) { /* layer doesn't have it */ } }
+  function truckDash(routeShown) {
+    for (const l of map.getStyle().layers) {
+      const id = l.id;
+      if (id.startsWith('nv-')) continue;
+      if (id.includes('building')) { try { map.setLayoutProperty(id, 'visibility', 'none'); } catch (e) {} continue; }   // buildings blend into the ground
+      if (l.type === 'background') paint(id, 'background-color', C.LAND);
+      else if (l.type === 'fill') {
+        if (id === 'land') paint(id, 'fill-color', C.LAND);
+        else if (id.includes('water')) paint(id, 'fill-color', C.WATER);
+        else if (id.includes('park')) paint(id, 'fill-color', C.PARK);
+        else if (/landuse|landcover|aeroway|structure|pitch/.test(id) || /^(road|bridge|tunnel)-/.test(id)) paint(id, 'fill-color', C.URBAN);
+      } else if (l.type === 'line') {
+        if (id.includes('water')) paint(id, 'line-color', C.RIVER);
+        else if (id.startsWith('admin')) paint(id, 'line-color', C.BORDER);
+        else if (isRoad(id) && id.includes('case')) paint(id, 'line-color', C.CASE);
+        else if (isRoad(id) && isMotorway(id)) paint(id, 'line-color', routeShown ? C.MOTORWAY_ROUTE : C.MOTORWAY);
+        else if (isRoad(id) && /primary|secondary|tertiary|major/.test(id)) paint(id, 'line-color', C.MAIN);
+        else if (isRoad(id) && /path|pedestrian|steps|track|rail/.test(id)) paint(id, 'line-color', C.PATH);
+        else if (isRoad(id)) paint(id, 'line-color', byClass(routeShown));
+      } else if (l.type === 'symbol') {
+        const c = /settlement|place|country|state/.test(id) ? C.TOWN : /water/.test(id) ? C.WATERLABEL : /road/.test(id) ? C.ROADLABEL : C.MINORLABEL;
+        paint(id, 'text-color', c); paint(id, 'text-halo-color', C.HALO);
+      }
+    }
+  }
+
+  // ---------- map ----------
+  const map = new mapboxgl.Map({ container: 'map', style: 'mapbox://styles/mapbox/dark-v11', center: [-2.63, 53.55], zoom: 10,
+    attributionControl: true, dragRotate: false, pitchWithRotate: false });
+  map.touchZoomRotate.disableRotation();
+
+  let trafficOn = true;
+  try { trafficOn = localStorage.getItem('nv-traffic') !== '0'; } catch (e) {}
+  $('traffic').classList.toggle('on', trafficOn);
+
+  map.on('style.load', () => {
+    truckDash(false);
+    // live traffic on the roads
+    map.addSource('nv-traffic', { type: 'vector', url: 'mapbox://mapbox.mapbox-traffic-v1' });
+    map.addLayer({ id: 'nv-traffic', type: 'line', source: 'nv-traffic', 'source-layer': 'traffic', minzoom: 6,
+      layout: { visibility: trafficOn ? 'visible' : 'none', 'line-cap': 'round' },
+      paint: { 'line-color': ['match', ['get', 'congestion'], 'moderate', '#F5B700', 'heavy', '#F26B1D', 'severe', '#C62828', 'rgba(0,0,0,0)'],
+        'line-width': ['interpolate', ['linear'], ['zoom'], 8, 1.2, 13, 3, 17, 6], 'line-opacity': 0.9 } },
+      firstLabel());
+    // routes: other routes grey and thinner, the chosen one blue on a dark edge, traffic coloured on top
+    map.addSource('nv-routes', { type: 'geojson', data: empty() });
+    map.addSource('nv-cong', { type: 'geojson', data: empty() });
+    const w = k => ['interpolate', ['exponential', 1.5], ['zoom'], 8, 3 * k, 12, 6 * k, 16, 14 * k];
+    map.addLayer({ id: 'nv-alt', type: 'line', source: 'nv-routes', filter: ['!=', ['get', 'sel'], true],
+      layout: { 'line-join': 'round', 'line-cap': 'round' }, paint: { 'line-color': '#8A94A6', 'line-width': w(.8), 'line-opacity': .85 } }, firstLabel());
+    map.addLayer({ id: 'nv-case', type: 'line', source: 'nv-routes', filter: ['==', ['get', 'sel'], true],
+      layout: { 'line-join': 'round', 'line-cap': 'round' }, paint: { 'line-color': '#0D0F12', 'line-width': w(1.45) } }, firstLabel());
+    map.addLayer({ id: 'nv-main', type: 'line', source: 'nv-routes', filter: ['==', ['get', 'sel'], true],
+      layout: { 'line-join': 'round', 'line-cap': 'round' }, paint: { 'line-color': '#3B9EFF', 'line-width': w(1) } }, firstLabel());
+    map.addLayer({ id: 'nv-cong', type: 'line', source: 'nv-cong',
+      layout: { 'line-join': 'round', 'line-cap': 'round' }, paint: { 'line-color': ['get', 'c'], 'line-width': ['case', ['get', 'sel'], w(1), w(.8)] } }, firstLabel());
+    map.on('click', 'nv-alt', e => { const i = e.features[0].properties.i; if (i != null) select(+i); });
+    map.on('mouseenter', 'nv-alt', () => map.getCanvas().style.cursor = 'pointer');
+    map.on('mouseleave', 'nv-alt', () => map.getCanvas().style.cursor = '');
+    drawRoutes();
+    startFromUrl();
+  });
+  function firstLabel() { const l = map.getStyle().layers.find(l => l.type === 'symbol'); return l ? l.id : undefined; }
+  const empty = () => ({ type: 'FeatureCollection', features: [] });
+
+  // ---------- state ----------
+  const st = { from: null, to: null, routes: [], sel: 0, when: 'now', at: null, me: null, tab: 'to' };
+  // a point = { lng, lat, name, sub }
+
+  function toast(t) { const el = $('toast'); el.textContent = t; el.classList.add('show'); clearTimeout(toast.t); toast.t = setTimeout(() => el.classList.remove('show'), 2200); }
+  const pad2 = n => String(n).padStart(2, '0');
+  const clock = d => pad2(d.getHours()) + ':' + pad2(d.getMinutes());
+  const dur = s => { const m = Math.max(1, Math.round(s / 60)); return m >= 60 ? Math.floor(m / 60) + ' h ' + pad2(m % 60) + ' min' : m + ' min'; };
+  const miles = m => (m / 1609.344).toFixed(1) + ' mi';
+  const fix = n => (+n).toFixed(6);
+
+  // ---------- places (Mapbox search) ----------
+  async function geocode(q) {
+    const c = st.me || map.getCenter();
+    const u = 'https://api.mapbox.com/geocoding/v5/mapbox.places/' + encodeURIComponent(q) + '.json?autocomplete=true&country=gb&language=en&limit=6'
+      + '&types=address,poi,postcode,place,locality,neighborhood&proximity=' + c.lng + ',' + c.lat + '&access_token=' + TOKEN;
+    const j = await (await fetch(u)).json();
+    return (j.features || []).map(f => {
+      const name = f.address ? f.address + ' ' + f.text : f.text;
+      const rest = f.place_name.replace(f.address ? f.address + ' ' : '', '').replace(f.text, '').replace(/^,\s*/, '').replace(/, United Kingdom$/, ', UK');
+      return { lng: f.center[0], lat: f.center[1], name, sub: rest };
+    });
+  }
+  async function reverse(lng, lat) {
+    try {
+      const u = 'https://api.mapbox.com/geocoding/v5/mapbox.places/' + lng + ',' + lat + '.json?limit=1&language=en&types=address,poi,place,locality&access_token=' + TOKEN;
+      const f = ((await (await fetch(u)).json()).features || [])[0];
+      if (!f) return { name: 'Dropped pin', sub: fix(lat) + ', ' + fix(lng) };
+      const ctx = (f.context || []).map(c => c.text);
+      const town = (f.context || []).find(c => /^(locality|place)/.test(c.id));
+      const name = (f.address ? f.address + ' ' : '') + f.text + (town && !f.id.startsWith('place') ? ', ' + town.text : '');
+      return { name, sub: f.place_name.replace(/, United Kingdom$/, '') };
+    } catch (e) { return { name: 'Dropped pin', sub: fix(lat) + ', ' + fix(lng) }; }
+  }
+
+  // ---------- the two boxes and their suggestions ----------
+  let active = null, sugItems = [], sugIdx = -1, sugTimer = null;
+  function setField(which, p) {
+    st[which] = p;
+    const input = $(which); input.value = p ? p.name : '';
+    $(which === 'from' ? 'fFrom' : 'fTo').classList.toggle('has', !!p || !!input.value);
+    placeMarkers();
+    plan();
+  }
+  ['from', 'to'].forEach(which => {
+    const input = $(which), field = $(which === 'from' ? 'fFrom' : 'fTo');
+    input.addEventListener('focus', () => { active = which; showSug(input.value); });
+    input.addEventListener('input', () => { field.classList.toggle('has', !!input.value); clearTimeout(sugTimer); sugTimer = setTimeout(() => showSug(input.value), 200); });
+    input.addEventListener('keydown', e => {
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); sugIdx = Math.max(0, Math.min(sugItems.length - 1, sugIdx + (e.key === 'ArrowDown' ? 1 : -1))); markSug(); }
+      else if (e.key === 'Enter') { e.preventDefault(); pick(sugItems[Math.max(0, sugIdx)]); }
+      else if (e.key === 'Escape') hideSug();
+    });
+    field.querySelector('.clear').addEventListener('click', () => { setField(which, null); input.focus(); });
+  });
+  document.addEventListener('mousedown', e => {
+    if (!e.target.closest('#suggest') && !e.target.closest('.field')) hideSug();
+    if (!e.target.closest('#whenMenu') && !e.target.closest('#whenBtn')) $('whenMenu').classList.remove('show');
+    if (!e.target.closest('#ctx')) $('ctx').classList.remove('show');
+  });
+  async function showSug(q) {
+    const box = $('suggest');
+    const items = [{ me: true, name: 'Your location' }];
+    q = q.trim();
+    if (q.length >= 2) { try { items.push(...await geocode(q)); } catch (e) {} }
+    if (document.activeElement !== $(active)) return;
+    sugItems = items; sugIdx = -1;
+    box.innerHTML = '';
+    items.forEach((it, i) => {
+      const b = document.createElement('button'); b.className = 'sug';
+      b.innerHTML = it.me
+        ? '<span class="ic me"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="2.5" fill="currentColor"/><path d="M12 1v4M12 19v4M1 12h4M19 12h4"/></svg></span><span class="tx">Your location</span>'
+        : '<span class="ic"><svg width="18" height="22" viewBox="0 0 24 28"><path d="M12 1C6.5 1 2 5.3 2 10.8 2 18 12 27 12 27s10-9 10-16.2C22 5.3 17.5 1 12 1Z" fill="none" stroke="currentColor" stroke-width="2.2"/><circle cx="12" cy="11" r="3.4" fill="currentColor"/></svg></span><span class="tx"><span class="t"></span><span class="s"></span></span>';
+      if (!it.me) { b.querySelector('.t').textContent = it.name; b.querySelector('.s').textContent = it.sub; }
+      b.addEventListener('mousedown', e => { e.preventDefault(); pick(it); });
+      box.appendChild(b);
+    });
+    box.classList.add('show');
+  }
+  function markSug() { [...$('suggest').children].forEach((b, i) => b.classList.toggle('on', i === sugIdx)); }
+  function hideSug() { $('suggest').classList.remove('show'); }
+  async function pick(it) {
+    if (!it || !active) return;
+    const which = active;
+    hideSug(); $(which).blur();
+    if (it.me) {
+      const me = await locate(false);
+      if (!me) return toast("Couldn't get your location");
+      setField(which, { lng: me.lng, lat: me.lat, name: 'Your location', sub: '', me: true });
+    } else setField(which, it);
+    if (which === 'from' && !st.to) $('to').focus();
+  }
+  $('swap').addEventListener('click', () => { const a = st.from; st.from = st.to; st.to = a; $('from').value = st.from ? st.from.name : ''; $('to').value = st.to ? st.to.name : '';
+    $('fFrom').classList.toggle('has', !!st.from); $('fTo').classList.toggle('has', !!st.to); placeMarkers(); plan(); });
+
+  // ---------- leave now / leave at / arrive at ----------
+  $('whenBtn').addEventListener('click', () => $('whenMenu').classList.toggle('show'));
+  $('whenMenu').addEventListener('click', e => {
+    const w = e.target.dataset.w; if (!w) return;
+    st.when = w; $('whenMenu').classList.remove('show');
+    $('whenLabel').textContent = { now: 'Leave now', depart: 'Leave at', arrive: 'Arrive at' }[w];
+    const t = $('whenTime');
+    t.classList.toggle('show', w !== 'now');
+    if (w !== 'now' && !t.value) { const d = new Date(Date.now() + 3600000); d.setMinutes(Math.ceil(d.getMinutes() / 5) * 5, 0, 0);
+      t.value = d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate()) + 'T' + pad2(d.getHours()) + ':' + pad2(d.getMinutes()); }
+    plan();
+  });
+  $('whenTime').addEventListener('change', plan);
+
+  // ---------- markers ----------
+  const flagSvg = '<svg viewBox="0 0 34 44" width="34" height="44"><ellipse cx="7" cy="42" rx="5" ry="2" fill="rgba(0,0,0,.4)"/><line x1="7" y1="4" x2="7" y2="42" stroke="#0D0F12" stroke-width="5" stroke-linecap="round"/><line x1="7" y1="4" x2="7" y2="42" stroke="#fff" stroke-width="2.6" stroke-linecap="round"/><path d="M8 4c8-3 16 4 24 1v16c-8 3-16-4-24-1Z" fill="#FF4D4D" stroke="#fff" stroke-width="1.8" stroke-linejoin="round"/></svg>';
+  let mFrom = null, mTo = null, mMe = null, mPin = null;
+  function placeMarkers() {
+    if (st.from) {
+      if (!mFrom) { const el = document.createElement('div'); el.className = 'mk-start';
+        mFrom = new mapboxgl.Marker({ element: el, draggable: true }).setLngLat([st.from.lng, st.from.lat]).addTo(map);
+        mFrom.on('dragend', () => dragged('from', mFrom)); }
+      mFrom.setLngLat([st.from.lng, st.from.lat]);
+    } else if (mFrom) { mFrom.remove(); mFrom = null; }
+    if (st.to) {
+      if (!mTo) { const el = document.createElement('div'); el.className = 'mk-flag'; el.innerHTML = flagSvg;
+        mTo = new mapboxgl.Marker({ element: el, draggable: true, anchor: 'bottom-left', offset: [-7, 0] }).setLngLat([st.to.lng, st.to.lat]).addTo(map);
+        mTo.on('dragend', () => dragged('to', mTo)); }
+      mTo.setLngLat([st.to.lng, st.to.lat]);
+    } else if (mTo) { mTo.remove(); mTo = null; }
+  }
+  async function dragged(which, m) {
+    const ll = m.getLngLat();
+    const r = await reverse(ll.lng, ll.lat);
+    setField(which, { lng: ll.lng, lat: ll.lat, name: r.name, sub: r.sub });
+  }
+
+  // ---------- routes ----------
+  let planSeq = 0;
+  function whenParam() {
+    const v = $('whenTime').value;
+    if (st.when === 'now' || !v) return '';
+    return (st.when === 'arrive' ? '&arrive_by=' : '&depart_at=') + encodeURIComponent(v);
+  }
+  async function plan() {
+    writeUrl();
+    st.routes = []; st.sel = 0;
+    if (!st.from || !st.to) { drawRoutes(); renderBody(); return; }
+    const seq = ++planSeq;
+    $('body').innerHTML = '<div class="loading"><div class="spin"></div>Finding the best routes…</div>';
+    $('panel').classList.remove('compact');
+    // "Arrive at" only works without live traffic (Mapbox's rule); the others use live traffic.
+    const profile = st.when === 'arrive' ? 'driving' : 'driving-traffic';
+    const u = 'https://api.mapbox.com/directions/v5/mapbox/' + profile + '/' + st.from.lng + ',' + st.from.lat + ';' + st.to.lng + ',' + st.to.lat
+      + '?alternatives=true&geometries=geojson&overview=full&steps=true&annotations=congestion,duration&language=en'
+      + whenParam() + '&access_token=' + TOKEN;
+    try {
+      const j = await (await fetch(u)).json();
+      if (seq !== planSeq) return;
+      if (!j.routes || !j.routes.length) throw new Error(j.message || 'No route found');
+      st.routes = j.routes.slice(0, 3);
+      st.sel = 0;
+      drawRoutes(); renderBody(); fit();
+    } catch (e) {
+      if (seq !== planSeq) return;
+      $('body').innerHTML = '<div class="err"></div>'; $('body').firstChild.textContent = "Couldn't find a route: " + e.message;
+    }
+  }
+  const CONG = { moderate: '#FFB020', heavy: '#FF6A2B', severe: '#E02424' };
+  function drawRoutes() {
+    if (!map.getSource('nv-routes')) return;
+    const feats = [], cong = [];
+    st.routes.forEach((r, i) => {
+      const sel = i === st.sel;
+      feats.push({ type: 'Feature', properties: { i, sel }, geometry: r.geometry });
+      const c = (r.legs[0].annotation || {}).congestion || [];
+      const pts = r.geometry.coordinates;
+      for (let k = 0; k < c.length && k < pts.length - 1;) {
+        const col = CONG[c[k]]; if (!col) { k++; continue; }
+        let e = k; while (e + 1 < c.length && c[e + 1] === c[k]) e++;
+        cong.push({ type: 'Feature', properties: { c: col, sel, i }, geometry: { type: 'LineString', coordinates: pts.slice(k, e + 2) } });
+        k = e + 1;
+      }
+    });
+    // chosen route last so it draws on top
+    feats.sort((a, b) => a.properties.sel - b.properties.sel); cong.sort((a, b) => a.properties.sel - b.properties.sel);
+    map.getSource('nv-routes').setData({ type: 'FeatureCollection', features: feats });
+    map.getSource('nv-cong').setData({ type: 'FeatureCollection', features: cong });
+    truckDash(st.routes.length > 0);
+  }
+  function fit() {
+    const b = new mapboxgl.LngLatBounds();
+    st.routes.forEach(r => r.geometry.coordinates.forEach(c => b.extend(c)));
+    if (b.isEmpty()) return;
+    const wide = window.innerWidth > 700;
+    map.fitBounds(b, { padding: wide ? { left: 420, right: 80, top: 60, bottom: 60 } : { left: 30, right: 70, top: Math.min(window.innerHeight * .62, 420) + 20, bottom: 40 }, duration: 800 });
+  }
+  function select(i) { st.sel = i; drawRoutes(); renderBody(); }
+
+  function viaText(r) {
+    const s = (r.legs[0].summary || '').trim();
+    if (s) return s.split(',').map(x => x.trim()).filter(Boolean).join('; ');
+    const names = []; (r.legs[0].steps || []).forEach(x => { const n = x.ref || x.name; if (n && !names.includes(n)) names.push(n); });
+    return names.slice(0, 3).join('; ');
+  }
+  function renderBody() {
+    const body = $('body');
+    $('actions').classList.toggle('show', st.routes.length > 0);
+    if (!st.routes.length) {
+      body.innerHTML = '';
+      if (st.from || st.to) body.appendChild(infoTabs());
+      $('panel').classList.toggle('compact', !st.from && !st.to);
+      return;
+    }
+    body.innerHTML = '<div class="sect">Routes</div>';
+    const quickest = Math.min(...st.routes.map(r => r.duration));
+    const base = st.when === 'depart' && $('whenTime').value ? new Date($('whenTime').value) : new Date();
+    st.routes.forEach((r, i) => {
+      const b = document.createElement('button'); b.className = 'route' + (i === st.sel ? ' sel' : '');
+      let timeTxt;
+      if (st.when === 'arrive' && $('whenTime').value) timeTxt = 'Leave at ' + clock(new Date(new Date($('whenTime').value).getTime() - r.duration * 1000));
+      else timeTxt = 'Arrive at ' + clock(new Date(base.getTime() + r.duration * 1000));
+      const delay = r.duration_typical ? Math.round((r.duration - r.duration_typical) / 60) : null;
+      const trafficTxt = delay == null ? '' : delay >= 5 ? ['tr2', 'Heavy traffic · +' + delay + ' min'] : delay >= 2 ? ['tr1', 'Some traffic · +' + delay + ' min'] : ['tr0', 'No traffic problems'];
+      b.innerHTML = '<div class="n">' + (i + 1) + '</div><div class="top"><span class="dur"></span><span class="arr"></span>'
+        + (r.duration === quickest && st.routes.length > 1 ? '<span class="badge">BEST</span>' : '') + '</div>'
+        + '<div class="via"></div><div class="meta"><span class="d"></span>' + (trafficTxt ? '<span class="' + trafficTxt[0] + '">● ' + trafficTxt[1] + '</span>' : '') + '</div>';
+      b.querySelector('.dur').textContent = dur(r.duration);
+      b.querySelector('.arr').textContent = timeTxt;
+      b.querySelector('.via').textContent = viaText(r);
+      b.querySelector('.d').textContent = miles(r.distance) + (r.duration > quickest + 30 ? ' · +' + Math.round((r.duration - quickest) / 60) + ' min' : '');
+      b.addEventListener('click', () => select(i));
+      body.appendChild(b);
+    });
+    body.appendChild(infoTabs());
+  }
+  function infoTabs() {
+    const wrap = document.createElement('div');
+    wrap.innerHTML = '<div class="tabs"><button data-t="from">Starting point</button><button data-t="to">Destination</button></div><div class="info"></div>';
+    if (!st[st.tab]) st.tab = st.to ? 'to' : 'from';
+    const draw = () => {
+      wrap.querySelectorAll('.tabs button').forEach(b => b.classList.toggle('on', b.dataset.t === st.tab));
+      const p = st[st.tab], info = wrap.querySelector('.info');
+      if (!p) { info.innerHTML = '<div class="hint">Not chosen yet.</div>'; return; }
+      info.innerHTML = '<div class="co"></div><div class="ad"></div><div class="btns">'
+        + '<button class="round" data-b="share" title="Share this place"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="18" cy="5" r="2.6"/><circle cx="6" cy="12" r="2.6"/><circle cx="18" cy="19" r="2.6"/><path d="m8.3 10.8 7.4-4.4M8.3 13.2l7.4 4.4"/></svg></button>'
+        + '<button class="round" data-b="copy" title="Copy the coordinates"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V5a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3"/></svg></button>'
+        + '<button class="round" data-b="go" title="Show on the map"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="2.5" fill="currentColor"/></svg></button></div>';
+      info.querySelector('.co').textContent = fix(p.lat).replace(/0+$/, '') + ',' + fix(p.lng).replace(/0+$/, '');
+      info.querySelector('.ad').textContent = p.sub || p.name;
+      info.querySelector('[data-b=share]').onclick = () => sharePlace(p);
+      info.querySelector('[data-b=copy]').onclick = () => copy(fix(p.lat) + ',' + fix(p.lng), 'Coordinates copied');
+      info.querySelector('[data-b=go]').onclick = () => map.flyTo({ center: [p.lng, p.lat], zoom: 15 });
+    };
+    wrap.querySelector('.tabs').addEventListener('click', e => { if (e.target.dataset.t) { st.tab = e.target.dataset.t; draw(); } });
+    draw();
+    return wrap;
+  }
+
+  // ---------- sharing / links ----------
+  async function copy(text, msg) { try { await navigator.clipboard.writeText(text); toast(msg); } catch (e) { prompt('Copy this:', text); } }
+  function enc(p) { return fix(p.lat) + ',' + fix(p.lng) + ',' + encodeURIComponent(p.name || ''); }
+  function routeLink() { return location.origin + '/plan?from=' + enc(st.from) + '&to=' + enc(st.to); }
+  function placeLink(p) { return location.origin + '/plan?to=' + enc(p); }
+  async function shareLink(url, title) {
+    if (navigator.share) { try { await navigator.share({ title, url }); return; } catch (e) { if (e.name === 'AbortError') return; } }
+    copy(url, 'Link copied');
+  }
+  function sharePlace(p) { shareLink(placeLink(p), p.name); }
+  $('copyRoute').addEventListener('click', () => copy(routeLink(), 'Route link copied'));
+  $('shareRoute').addEventListener('click', () => shareLink(routeLink(), 'Route to ' + st.to.name));
+  function writeUrl() {
+    const q = new URLSearchParams();
+    if (st.from && !st.from.me) q.set('from', fix(st.from.lat) + ',' + fix(st.from.lng) + ',' + (st.from.name || ''));
+    if (st.to) q.set('to', fix(st.to.lat) + ',' + fix(st.to.lng) + ',' + (st.to.name || ''));
+    history.replaceState(null, '', '/plan' + (q.toString() ? '?' + q : ''));
+  }
+  function parsePoint(v) {
+    if (!v) return null;
+    const [lat, lng, ...name] = v.split(',');
+    if (!isFinite(+lat) || !isFinite(+lng)) return null;
+    return { lat: +lat, lng: +lng, name: name.join(',') || 'Dropped pin', sub: (+lat).toFixed(5) + ', ' + (+lng).toFixed(5) };
+  }
+  let started = false;
+  function startFromUrl() {
+    if (started) return; started = true;
+    const q = new URLSearchParams(location.search);
+    const f = parsePoint(q.get('from')), t = parsePoint(q.get('to'));
+    if (f) { st.from = f; $('from').value = f.name; $('fFrom').classList.add('has'); }
+    if (t) { st.to = t; $('to').value = t.name; $('fTo').classList.add('has'); }
+    placeMarkers();
+    if (f && t) plan();
+    else if (t) { map.jumpTo({ center: [t.lng, t.lat], zoom: 14 }); renderBody(); }
+    else locate(true);
+  }
+
+  // ---------- right-click (or press and hold) on the map ----------
+  let ctxAt = null, ctxPlace = null;
+  async function openCtx(lngLat, point) {
+    ctxAt = lngLat; ctxPlace = null;
+    const el = $('ctx');
+    $('ctxName').textContent = 'Finding this place…'; $('ctxSub').textContent = '';
+    const r = map.getContainer().getBoundingClientRect();
+    let x = r.left + point.x + 6, y = r.top + point.y + 6;
+    el.classList.add('show');
+    x = Math.min(x, window.innerWidth - el.offsetWidth - 8); y = Math.min(y, window.innerHeight - el.offsetHeight - 8);
+    el.style.left = x + 'px'; el.style.top = y + 'px';
+    if (mPin) mPin.remove();
+    const pe = document.createElement('div'); pe.className = 'mk-pin';
+    pe.innerHTML = '<svg viewBox="0 0 24 28" width="26" height="34"><path d="M12 1C6.5 1 2 5.3 2 10.8 2 18 12 27 12 27s10-9 10-16.2C22 5.3 17.5 1 12 1Z" fill="#FF4D4D" stroke="#fff" stroke-width="1.5"/><circle cx="12" cy="11" r="3.8" fill="#fff"/></svg>';
+    mPin = new mapboxgl.Marker({ element: pe, anchor: 'bottom' }).setLngLat(lngLat).addTo(map);
+    const p = await reverse(lngLat.lng, lngLat.lat);
+    if (ctxAt !== lngLat) return;
+    ctxPlace = { lng: lngLat.lng, lat: lngLat.lat, name: p.name, sub: p.sub };
+    $('ctxName').textContent = p.name; $('ctxSub').textContent = fix(lngLat.lat) + ', ' + fix(lngLat.lng);
+  }
+  function closeCtx() { $('ctx').classList.remove('show'); if (mPin) { mPin.remove(); mPin = null; } }
+  map.on('contextmenu', e => { e.preventDefault(); openCtx(e.lngLat, e.point); });
+  let hold = null;
+  map.on('touchstart', e => { if (e.originalEvent.touches.length !== 1) return; clearTimeout(hold); hold = setTimeout(() => openCtx(e.lngLat, e.point), 550); });
+  ['touchend', 'touchmove', 'movestart'].forEach(ev => map.on(ev, () => clearTimeout(hold)));
+  map.on('click', () => closeCtx());
+  $('ctx').addEventListener('click', e => {
+    const a = e.target.closest('button') && e.target.closest('button').dataset.a; if (!a || !ctxAt) return;
+    const p = ctxPlace || { lng: ctxAt.lng, lat: ctxAt.lat, name: 'Dropped pin', sub: fix(ctxAt.lat) + ', ' + fix(ctxAt.lng) };
+    closeCtx();
+    if (a === 'share') sharePlace(p);
+    else if (a === 'centre') map.easeTo({ center: [p.lng, p.lat] });
+    else if (a === 'from') { setField('from', p); if (!st.to) $('to').focus(); }
+    else if (a === 'to') setField('to', p);
+  });
+
+  // ---------- map buttons ----------
+  $('zin').onclick = () => map.zoomIn();
+  $('zout').onclick = () => map.zoomOut();
+  $('traffic').onclick = () => {
+    trafficOn = !trafficOn; $('traffic').classList.toggle('on', trafficOn);
+    try { localStorage.setItem('nv-traffic', trafficOn ? '1' : '0'); } catch (e) {}
+    if (map.getLayer('nv-traffic')) map.setLayoutProperty('nv-traffic', 'visibility', trafficOn ? 'visible' : 'none');
+  };
+  $('locate').onclick = () => locate(true);
+  function locate(fly) {
+    return new Promise(res => {
+      if (!navigator.geolocation) return res(null);
+      navigator.geolocation.getCurrentPosition(pos => {
+        const me = { lng: pos.coords.longitude, lat: pos.coords.latitude };
+        st.me = me;
+        if (!mMe) { const el = document.createElement('div'); el.className = 'mk-me'; mMe = new mapboxgl.Marker({ element: el }).setLngLat([me.lng, me.lat]).addTo(map); }
+        else mMe.setLngLat([me.lng, me.lat]);
+        $('locate').classList.add('on'); setTimeout(() => $('locate').classList.remove('on'), 1200);
+        if (fly) map.flyTo({ center: [me.lng, me.lat], zoom: 13 });
+        res(me);
+      }, () => res(null), { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 });
+    });
+  }
+
+  // ---------- panel show / hide ----------
+  $('collapse').onclick = () => { const b = $('panelBody'), bd = $('body'); const hide = b.style.display !== 'none';
+    b.style.display = hide ? 'none' : ''; bd.style.display = hide ? 'none' : ''; $('panel').classList.toggle('compact', hide || (!st.routes.length && !st.from && !st.to)); };
+  </script>
+</body>
+</html>

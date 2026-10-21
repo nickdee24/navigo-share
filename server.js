@@ -170,6 +170,12 @@ const server = http.createServer(async (req, res) => {
     res.writeHead(200, { 'Content-Type': 'image/jpeg', 'Cache-Control': 'no-cache' });
     return res.end(Buffer.from(t.photo, 'base64'));
   }
+  if (url.pathname === '/plan' || url.pathname === '/plan/') {   // trip planner
+    return fs.readFile(path.join(PUBLIC_DIR, 'plan.html'), (err, data) => {
+      if (err) { res.writeHead(500); return res.end(); }
+      res.writeHead(200, { 'Content-Type': MIME['.html'], 'Cache-Control': 'no-cache' }); res.end(data);
+    });
+  }
   if (url.pathname === '/' || /^\/t\/[A-Za-z0-9]{8,16}\/?$/.test(url.pathname)) {
     return fs.readFile(path.join(PUBLIC_DIR, url.pathname === '/' ? 'index.html' : 'trip.html'), (err, data) => {
       if (err) { res.writeHead(500); return res.end(); }
