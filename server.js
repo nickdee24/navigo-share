@@ -166,10 +166,14 @@ async function spotifyAuth() {
 async function musicSearch(q) {
   const token = await spotifyAuth();
   if (!token) return { error: 'not-set-up' };
-  const u = 'https://api.spotify.com/v1/search?type=track,artist&limit=15&market=GB&q=' + encodeURIComponent(q);
+  const u = 'https://api.spotify.com/v1/search?type=track,artist&limit=10&market=GB&q=' + encodeURIComponent(q);
   const r = await fetch(u, { headers: { Authorization: 'Bearer ' + token } });
   if (r.status === 401) { spotifyToken = null; return musicSearch(q); }
-  if (!r.ok) throw new Error('Spotify search failed (' + r.status + ')');
+  if (!r.ok) {
+    let why = ''; try { const e = await r.json(); why = (e.error && (e.error.message || e.error)) || ''; } catch (_) {}
+    console.log('Spotify search refused', r.status, why);
+    throw new Error('Spotify search failed (' + r.status + (why ? ': ' + why : '') + ')');
+  }
   const j = await r.json();
   const img = imgs => { const s = (imgs || []).slice().sort((a, b) => (a.width || 0) - (b.width || 0)); return (s.find(i => (i.width || 0) >= 64) || s[s.length - 1] || {}).url || null; };
   return {
