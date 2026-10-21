@@ -163,12 +163,24 @@ async function spotifyAuth() {
   spotifyToken = j.access_token; spotifyTokenUntil = Date.now() + (j.expires_in - 60) * 1000;
   return spotifyToken;
 }
+// Backup song list (no key needed): Apple's public catalogue. The phone then plays the song in Spotify by name.
+async function itunesSearch(q) {
+  const r = await fetch('https://itunes.apple.com/search?media=music&entity=song&limit=10&country=GB&term=' + encodeURIComponent(q));
+  if (!r.ok) throw new Error('Song search failed (' + r.status + ')');
+  const j = await r.json();
+  return { source: 'itunes', artists: [], tracks: (j.results || []).map(t => ({ name: t.trackName, uri: '', artists: t.artistName,
+    album: t.collectionName, image: (t.artworkUrl100 || '').replace('100x100', '120x120') || null, durationMs: t.trackTimeMillis || 0 })) };
+}
 async function musicSearch(q) {
+  try { return await spotifySearch(q); }
+  catch (e) { console.log('Using backup song search:', e.message); return itunesSearch(q); }
+}
+async function spotifySearch(q) {
   const token = await spotifyAuth();
-  if (!token) return { error: 'not-set-up' };
+  if (!token) throw new Error('no Spotify key');
   const u = 'https://api.spotify.com/v1/search?type=track,artist&limit=10&market=GB&q=' + encodeURIComponent(q);
   const r = await fetch(u, { headers: { Authorization: 'Bearer ' + token } });
-  if (r.status === 401) { spotifyToken = null; return musicSearch(q); }
+  if (r.status === 401) { spotifyToken = null; throw new Error('Spotify key expired'); }
   if (!r.ok) {
     let why = ''; try { const e = await r.json(); why = (e.error && (e.error.message || e.error)) || ''; } catch (_) {}
     console.log('Spotify search refused', r.status, why);
@@ -176,7 +188,7 @@ async function musicSearch(q) {
   }
   const j = await r.json();
   const img = imgs => { const s = (imgs || []).slice().sort((a, b) => (a.width || 0) - (b.width || 0)); return (s.find(i => (i.width || 0) >= 64) || s[s.length - 1] || {}).url || null; };
-  return {
+  return { source: 'spotify',
     artists: ((j.artists && j.artists.items) || []).slice(0, 3).map(a => ({ name: a.name, uri: a.uri, image: img(a.images) })),
     tracks: ((j.tracks && j.tracks.items) || []).map(t => ({ name: t.name, uri: t.uri, artists: t.artists.map(a => a.name).join(', '),
       album: t.album && t.album.name, image: img(t.album && t.album.images), durationMs: t.duration_ms }))
