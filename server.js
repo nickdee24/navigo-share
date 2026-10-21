@@ -92,7 +92,9 @@ async function handleShareApi(req, res, action) {
   // What you're listening to (Spotify / YouTube Music), shown above your icon. null = nothing playing.
   if (b.music && b.music.title) {
     t.music = { title: String(b.music.title).slice(0, 80), artist: String(b.music.artist || '').slice(0, 60),
-      player: String(b.music.player || '').slice(0, 12), playing: !!b.music.playing };
+      player: String(b.music.player || '').slice(0, 12), playing: !!b.music.playing,
+      // song progress in ms when this update arrived; the page counts on from here
+      pos: num(b.music.pos), dur: num(b.music.dur), at: Date.now() };
   } else if (b.music !== undefined) t.music = null;
   const lat = num(b.lat), lng = num(b.lng);
   if (lat != null && lng != null && Math.abs(lat) <= 90 && Math.abs(lng) <= 180) {

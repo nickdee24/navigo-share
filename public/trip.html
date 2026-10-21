@@ -34,14 +34,21 @@
     #where:empty { display: none; }
     #where .pin { color: var(--accent); }
     /* what they're listening to, in the card */
-    #song { display: none; align-items: center; gap: 7px; margin-top: 6px; font-size: 13px; min-width: 0; }
+    #song { display: none; align-items: flex-start; gap: 7px; margin-top: 6px; font-size: 13px; min-width: 0; }
     #song.show { display: flex; }
     #song .tag { flex: none; font-size: 10px; font-weight: 800; padding: 1px 6px; border-radius: 4px; background: var(--alt); }
     #song .tag.spotify { background: #1DB954; color: #000; }
     #song .tag.youtube { background: #FF0033; color: #fff; }
     #song .st { flex: none; font-size: 11px; color: var(--green); }
     #song .st.paused { color: var(--muted); }
-    #song .txt { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+    #song .txt { white-space: normal; overflow-wrap: anywhere; min-width: 0; line-height: 1.3; }
+    #song .tag, #song .st { margin-top: 1px; }
+    #song .time { flex: none; margin-left: auto; padding-left: 6px; color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+    #songBar { display: none; height: 3px; margin-top: 5px; background: #2F343C; border-radius: 2px; overflow: hidden; }
+    #songBar.show { display: block; }
+    #songBar > div { height: 100%; width: 0; background: #1DB954; }
+    #songBar.youtube > div { background: #FF0033; }
+    .np .time { flex: none; color: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; }
     .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 10px; }
     .stat { background: var(--alt); border-radius: 10px; padding: 7px 10px; }
     .stat .v { font-size: 18px; font-weight: 700; }
@@ -82,15 +89,15 @@
     .me.old .face { filter: grayscale(.8); opacity: .75; }
     /* now playing, above the icon */
     .np { position: absolute; left: 50%; bottom: 60px; transform: translateX(-50%); display: none; align-items: center; gap: 6px;
-      max-width: 230px; padding: 4px 9px 4px 5px; border-radius: 14px; background: rgba(23,26,31,.95); border: 1px solid var(--border);
-      box-shadow: 0 3px 10px rgba(0,0,0,.5); white-space: nowrap; font-size: 12px; color: var(--text); pointer-events: none; }
+      width: max-content; max-width: min(340px, 80vw); padding: 4px 9px 4px 5px; border-radius: 14px; background: rgba(23,26,31,.95); border: 1px solid var(--border);
+      box-shadow: 0 3px 10px rgba(0,0,0,.5); font-size: 12px; color: var(--text); pointer-events: none; }
     .np.show { display: flex; }
     .np .tag { flex: none; font-size: 10px; font-weight: 800; padding: 1px 6px; border-radius: 4px; }
     .np .tag.spotify { background: #1DB954; color: #000; }
     .np .tag.youtube { background: #FF0033; color: #fff; }
     .np .st { flex: none; font-size: 10px; color: var(--green); }
     .np .st.paused { color: var(--muted); }
-    .np .txt { overflow: hidden; text-overflow: ellipsis; }
+    .np .txt { white-space: normal; overflow-wrap: anywhere; line-height: 1.3; }
     .flag { font-size: 30px; line-height: 1; filter: drop-shadow(0 2px 3px rgba(0,0,0,.6)); }
   </style>
 </head>
@@ -104,7 +111,8 @@
     </div>
     <div id="to"></div>
     <div id="where"></div>
-    <div id="song"><span class="tag"></span><span class="st"></span><span class="txt"></span></div>
+    <div id="song"><span class="tag"></span><span class="st"></span><span class="txt"></span><span class="time"></span></div>
+    <div id="songBar"><div></div></div>
     <div class="stats" id="stats">
       <div class="stat"><div class="v" id="arrive">--:--</div><div class="l">Arrival</div></div>
       <div class="stat"><div class="v" id="left">--</div><div class="l">Time left</div></div>
@@ -169,13 +177,23 @@
     if (t.hasPhoto) return '<img src="/api/share/' + id + '/photo?v=' + t.photoV + '" alt="">';
     return t.mood || '🚗';
   }
+  // Where the song is now: its position when the phone last sent it, plus the time since (while playing)
+  const mmss = ms => { const s = Math.max(0, Math.floor(ms / 1000)); return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0'); };
+  function songPos(m) {
+    if (m.pos == null) return null;
+    let p = m.pos + (m.playing && m.at ? Date.now() - m.at : 0);
+    if (m.dur) p = Math.min(p, m.dur);
+    return p;
+  }
+  function songTime(m) { const p = songPos(m); return p == null ? '' : mmss(p) + (m.dur ? ' / ' + mmss(m.dur) : ''); }
+
   function drawMe(t) {
     if (t.lat == null || t.endedAt) return;
     const ll = [t.lat, t.lng];
     if (!me || photoV !== t.photoV) {
       photoV = t.photoV;
       const icon = L.divIcon({ className: '', iconSize: [56, 56], iconAnchor: [28, 28],
-        html: '<div class="me"><div class="np"><span class="tag"></span><span class="st"></span><span class="txt"></span></div>' +
+        html: '<div class="me"><div class="np"><span class="tag"></span><span class="st"></span><span class="txt"></span><span class="time"></span></div>' +
           '<div class="arrow"></div><div class="face">' + faceHtml(t) + '</div></div>' });
       if (me) me.setIcon(icon); else me = L.marker(ll, { icon, zIndexOffset: 1000 }).addTo(map);
     }
@@ -198,9 +216,22 @@
         const st = np.querySelector('.st');
         st.textContent = m.playing ? '▶' : '❚❚'; st.className = 'st' + (m.playing ? '' : ' paused');
         np.querySelector('.txt').textContent = [m.artist, m.title].filter(Boolean).join(' – ');
+        np.querySelector('.time').textContent = songTime(m);
+        fitPill(np);
       }
     }
   }
+  // Keep the song pill on screen: slide it sideways if the icon is near the edge of the map.
+  function fitPill(np) {
+    np.style.transform = 'translateX(-50%)';
+    const r = np.getBoundingClientRect(), pad = 8, w = window.innerWidth;
+    let dx = 0;
+    if (r.left < pad) dx = pad - r.left;
+    else if (r.right > w - pad) dx = (w - pad) - r.right;
+    if (dx) np.style.transform = 'translateX(calc(-50% + ' + Math.round(dx) + 'px))';
+  }
+  map.on('move', () => { const np = me && me.getElement() && me.getElement().querySelector('.np.show'); if (np) fitPill(np); });
+
   function drawRoute(t) {
     if (t.routeV !== routeV) {
       routeV = t.routeV;
@@ -265,7 +296,15 @@
       const st = song.querySelector('.st');
       st.textContent = m.playing ? '▶' : '❚❚'; st.className = 'st' + (m.playing ? '' : ' paused');
       song.querySelector('.txt').textContent = [m.artist, m.title].filter(Boolean).join(' – ');
+      song.querySelector('.time').textContent = songTime(m);
     }
+    const bar = $('songBar'), p = m ? songPos(m) : null;
+    bar.classList.toggle('show', !!(m && p != null && m.dur));
+    if (m) bar.className = (m && p != null && m.dur ? 'show ' : '') + (m.player || '').toLowerCase();
+    if (m && p != null && m.dur) bar.firstElementChild.style.width = (p / m.dur * 100).toFixed(1) + '%';
+    // keep the pill's time ticking too
+    const pillTime = me && me.getElement() && me.getElement().querySelector('.np .time');
+    if (pillTime && m) pillTime.textContent = songTime(m);
     $('stats').style.display = t.dest && !t.endedAt ? '' : 'none';
     $('progress').style.display = t.dest && !t.endedAt ? '' : 'none';
     if (t.eta) {
@@ -305,6 +344,7 @@
       // clock difference between this device and the server, so "updated x ago" is right
       const skew = Date.now() - data.now;
       ['updatedAt', 'endedAt', 'startedAt', 'eta'].forEach(k => { if (data[k]) data[k] += skew; });
+      if (data.music && data.music.at) data.music.at += skew;
       $('msg').classList.remove('show');
       if (!data.endedAt && wasEnded) first = true;   // a new trip on the same link: zoom to it again
       wasEnded = !!data.endedAt;
