@@ -61,6 +61,7 @@ function pruneShares() {
 function endShare(t, arrived) {
   t.endedAt = Date.now(); t.arrived = !!arrived;
   t.lastDest = t.dest ? t.dest.name : null;
+  t.music = null;
   t.lat = t.lng = t.heading = t.speed = t.eta = t.remainingM = null; t.dest = null; t.route = null;
   t.routeV = (t.routeV || 0) + 1;
 }
@@ -68,7 +69,7 @@ setInterval(pruneShares, 10 * 60000);
 const num = v => (v == null || v === '' || !isFinite(+v) ? null : +v);
 function publicShare(t) {
   return { name: t.name, mood: t.mood, hasPhoto: !!t.photo, photoV: t.photoV || 0, lat: t.lat, lng: t.lng, heading: t.heading,
-    speed: t.speed, dest: t.dest, eta: t.eta, remainingM: t.remainingM, route: t.route, routeV: t.routeV || 0, lastDest: t.lastDest || null,
+    speed: t.speed, music: t.music || null, dest: t.dest, eta: t.eta, remainingM: t.remainingM, route: t.route, routeV: t.routeV || 0, lastDest: t.lastDest || null,
     startedAt: t.startedAt, updatedAt: t.updatedAt, endedAt: t.endedAt || null, arrived: !!t.arrived, now: Date.now() };
 }
 async function handleShareApi(req, res, action) {
@@ -86,6 +87,11 @@ async function handleShareApi(req, res, action) {
   if (t.endedAt) { t.startedAt = Date.now(); t.endedAt = null; t.arrived = false; t.photoV = (t.photoV || 0) + 1; }
   t.name = String(b.name || 'Someone').slice(0, 30);
   t.mood = String(b.mood || '').slice(0, 16);
+  // What you're listening to (Spotify / YouTube Music), shown above your icon. null = nothing playing.
+  if (b.music && b.music.title) {
+    t.music = { title: String(b.music.title).slice(0, 80), artist: String(b.music.artist || '').slice(0, 60),
+      player: String(b.music.player || '').slice(0, 12), playing: !!b.music.playing };
+  } else if (b.music !== undefined) t.music = null;
   const lat = num(b.lat), lng = num(b.lng);
   if (lat != null && lng != null && Math.abs(lat) <= 90 && Math.abs(lng) <= 180) {
     t.lat = lat; t.lng = lng; t.heading = num(b.heading); t.speed = num(b.speed); t.updatedAt = Date.now();
