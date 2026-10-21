@@ -30,6 +30,9 @@
     #moodTag { font-size: 13px; color: var(--muted); font-weight: 500; }
     #to { color: var(--muted); font-size: 14px; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     #to b { color: var(--text); font-weight: 600; }
+    #where { color: var(--text); font-size: 14px; margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    #where:empty { display: none; }
+    #where .pin { color: var(--accent); }
     .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 10px; }
     .stat { background: var(--alt); border-radius: 10px; padding: 7px 10px; }
     .stat .v { font-size: 18px; font-weight: 700; }
@@ -91,6 +94,7 @@
       <span id="moodTag"></span>
     </div>
     <div id="to"></div>
+    <div id="where"></div>
     <div class="stats" id="stats">
       <div class="stat"><div class="v" id="arrive">--:--</div><div class="l">Arrival</div></div>
       <div class="stat"><div class="v" id="left">--</div><div class="l">Time left</div></div>
@@ -234,6 +238,14 @@
     document.title = t.name + "'s live trip";
     $('to').innerHTML = t.dest ? 'To <b></b>' : 'No destination set';
     if (t.dest) $('to').querySelector('b').textContent = t.dest.name;
+    // where they are now: street, area and town
+    const pl = !t.endedAt && t.place;
+    $('where').textContent = '';
+    if (pl) {
+      const town = [pl.area, pl.town].filter(Boolean).join(', ');
+      const text = pl.road ? pl.road + (town ? ' · ' + town : '') : town;
+      if (text) { $('where').innerHTML = '<span class="pin">📍</span> '; $('where').append(document.createTextNode(text)); }
+    }
     $('stats').style.display = t.dest && !t.endedAt ? '' : 'none';
     $('progress').style.display = t.dest && !t.endedAt ? '' : 'none';
     if (t.eta) {

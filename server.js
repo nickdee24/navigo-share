@@ -61,7 +61,7 @@ function pruneShares() {
 function endShare(t, arrived) {
   t.endedAt = Date.now(); t.arrived = !!arrived;
   t.lastDest = t.dest ? t.dest.name : null;
-  t.music = null;
+  t.music = null; t.place = null; t.placeAt = null;
   t.lat = t.lng = t.heading = t.speed = t.eta = t.remainingM = null; t.dest = null; t.route = null;
   t.routeV = (t.routeV || 0) + 1;
 }
@@ -69,7 +69,7 @@ setInterval(pruneShares, 10 * 60000);
 const num = v => (v == null || v === '' || !isFinite(+v) ? null : +v);
 function publicShare(t) {
   return { name: t.name, mood: t.mood, hasPhoto: !!t.photo, photoV: t.photoV || 0, lat: t.lat, lng: t.lng, heading: t.heading,
-    speed: t.speed, music: t.music || null, dest: t.dest, eta: t.eta, remainingM: t.remainingM, route: t.route, routeV: t.routeV || 0, lastDest: t.lastDest || null,
+    speed: t.speed, place: t.place || null, music: t.music || null, dest: t.dest, eta: t.eta, remainingM: t.remainingM, route: t.route, routeV: t.routeV || 0, lastDest: t.lastDest || null,
     startedAt: t.startedAt, updatedAt: t.updatedAt, endedAt: t.endedAt || null, arrived: !!t.arrived, now: Date.now() };
 }
 async function handleShareApi(req, res, action) {
@@ -95,6 +95,7 @@ async function handleShareApi(req, res, action) {
   const lat = num(b.lat), lng = num(b.lng);
   if (lat != null && lng != null && Math.abs(lat) <= 90 && Math.abs(lng) <= 180) {
     t.lat = lat; t.lng = lng; t.heading = num(b.heading); t.speed = num(b.speed); t.updatedAt = Date.now();
+    updatePlace(t);
   } else t.updatedAt ||= Date.now();
   if (b.dest && isFinite(+b.dest.lat) && isFinite(+b.dest.lng)) {
     t.dest = { name: String(b.dest.name || 'Destination').slice(0, 80), lat: +b.dest.lat, lng: +b.dest.lng };
@@ -106,6 +107,39 @@ async function handleShareApi(req, res, action) {
   if (b.photo === null) t.photo = null;
   save();
   return json(res, 200, { ok: true, url: '/t/' + id, needRoute: !!(t.dest && !t.route), needPhoto: !!b.wantPhoto && !t.photo });
+}
+
+// ---------- where you are: street and town (OpenStreetMap's Nominatim, at most 1 lookup a second, cached) ----------
+const placeCache = new Map();
+let nominatimChain = Promise.resolve();
+function nominatim(url) {
+  const p = nominatimChain.then(() => fetch(url, { headers: { 'User-Agent': 'NaviGO-ShareTrip/1.0 (personal trip sharing)', 'Accept-Language': 'en-GB' } })
+    .then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); }));
+  nominatimChain = p.catch(() => {}).then(() => new Promise(r => setTimeout(r, 1100)));
+  return p;
+}
+async function placeName(lat, lng) {
+  const key = lat.toFixed(3) + ',' + lng.toFixed(3);   // about 100 m squares
+  if (placeCache.has(key)) return placeCache.get(key);
+  let place = null;
+  try {
+    const j = await nominatim(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&zoom=17&addressdetails=1&lat=${lat}&lon=${lng}`);
+    const a = j.address || {};
+    const road = a.road || a.pedestrian || a.residential || null;
+    const area = a.suburb || a.village || a.town || a.city_district || a.neighbourhood || a.hamlet || null;
+    const town = a.town || a.city || a.village || a.county || null;
+    place = { road, area: area && area !== town ? area : null, town };
+  } catch { /* try again on a later update */ }
+  if (place) { placeCache.set(key, place); if (placeCache.size > 3000) placeCache.delete(placeCache.keys().next().value); }
+  return place;
+}
+function updatePlace(t) {
+  if (t.lat == null || t.placeBusy) return;
+  // look again after moving about 150 m
+  if (t.placeAt && Math.hypot(t.lat - t.placeAt[0], (t.lng - t.placeAt[1]) * Math.cos(t.lat * Math.PI / 180)) < 0.00135) return;
+  t.placeBusy = true;
+  const at = [t.lat, t.lng];
+  placeName(at[0], at[1]).then(p => { if (p) { t.place = p; t.placeAt = at; } }).finally(() => { t.placeBusy = false; });
 }
 
 // ---------- http ----------
