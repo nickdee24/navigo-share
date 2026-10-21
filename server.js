@@ -83,7 +83,7 @@ async function handleShareApi(req, res, action) {
     if (t && !t.endedAt) { endShare(t, b.arrived); save(); }
     return json(res, 200, { ok: true });
   }
-  if (!t) t = db.shares[id] = { key, startedAt: Date.now() };
+  if (!t) { t = db.shares[id] = { key, startedAt: Date.now() }; console.log('Share link in use: /t/' + id); }
   if (t.endedAt) { t.startedAt = Date.now(); t.endedAt = null; t.arrived = false; t.photoV = (t.photoV || 0) + 1; }
   t.name = String(b.name || 'Someone').slice(0, 30);
   t.mood = String(b.mood || '').slice(0, 16);
