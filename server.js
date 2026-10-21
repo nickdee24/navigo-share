@@ -80,7 +80,9 @@ async function handleShareApi(req, res, action) {
   let t = db.shares[id];
   if (t && t.key !== key) return json(res, 403, { error: 'Wrong key' });
   if (action === 'end') {
-    if (t && !t.endedAt) { endShare(t, b.arrived); save(); }
+    // forget: you made a new link, so the old one stops working altogether
+    if (t && b.forget) { delete db.shares[id]; save(); }
+    else if (t && !t.endedAt) { endShare(t, b.arrived); save(); }
     return json(res, 200, { ok: true });
   }
   if (!t) { t = db.shares[id] = { key, startedAt: Date.now() }; console.log('Share link in use: /t/' + id); }
