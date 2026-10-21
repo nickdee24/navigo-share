@@ -18,6 +18,7 @@
       font: 15px/1.35 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
     #map { position: fixed; inset: 0; background: #2B2F36; }
     .leaflet-container { background: #2B2F36; }
+    .dark-tiles { filter: invert(1) hue-rotate(180deg) brightness(.85) contrast(.9) saturate(.4); }
     .leaflet-control-attribution { background: rgba(13,15,18,.7) !important; color: var(--muted) !important; font-size: 10px; }
     .leaflet-control-attribution a { color: var(--muted) !important; }
 
@@ -94,6 +95,7 @@
   <div id="msg"><div class="box"><div style="font-size:36px" id="msgIcon">🔗</div><h2 id="msgTitle"></h2><p id="msgText"></p></div></div>
 
   <script src="/vendor/leaflet.js"></script>
+  <script src="/config.js"></script>
   <script>
   'use strict';
   const id = location.pathname.split('/').filter(Boolean)[1];
@@ -102,10 +104,19 @@
   const $ = s => document.getElementById(s);
 
   const map = L.map('map', { zoomControl: false, attributionControl: true }).setView([53.55, -2.63], 12);
-  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-    maxZoom: 19, subdomains: 'abcd',
-    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/">CARTO</a>'
-  }).addTo(map);
+  // Mapbox's dark map (same maps as the NaviGO app) when the site has a MAPBOX_TOKEN set on Render;
+  // otherwise OpenStreetMap's free map, darkened to match.
+  if (window.MAPBOX_TOKEN) {
+    L.tileLayer('https://api.mapbox.com/styles/v1/mapbox/dark-v11/tiles/512/{z}/{x}/{y}@2x?access_token=' + window.MAPBOX_TOKEN, {
+      tileSize: 512, zoomOffset: -1, maxZoom: 20,
+      attribution: '&copy; <a href="https://www.mapbox.com/about/maps/">Mapbox</a> &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+    }).addTo(map);
+  } else {
+    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19, className: 'dark-tiles',
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+    }).addTo(map);
+  }
 
   let follow = true, first = true, wasEnded = false, data = null, routeV = -1, photoV = -1;
   let routePts = [], doneLine = null, todoCase = null, todoLine = null, me = null, flag = null;

@@ -6,7 +6,7 @@ profile photo), with when it was last updated.
 
 - Your link never changes (`/t/<your id>`). Between trips the page says you're not sharing and shows no location.
 - Only your phone can update it (it signs each update with a secret key it keeps).
-- Map: OpenStreetMap data, dark tiles by CARTO, drawn with Leaflet. No accounts or API keys.
+- Map: Mapbox's dark map when `MAPBOX_TOKEN` (a Mapbox public `pk.` token) is set in Render → Environment; otherwise OpenStreetMap, darkened. Drawn with Leaflet.
 
 ## Deploy on Render
 

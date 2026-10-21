@@ -9,6 +9,8 @@ const path = require('path');
 const PORT = process.env.PORT || 3000;
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'data');
 const PUBLIC_DIR = path.join(__dirname, 'public');
+// Mapbox public token for the map (set MAPBOX_TOKEN in Render → Environment). Without it the page uses OpenStreetMap.
+const MAPBOX_TOKEN = process.env.MAPBOX_TOKEN || '';
 fs.mkdirSync(DATA_DIR, { recursive: true });
 
 // ---------- storage (a JSON file; on Render's free plan it's wiped on restart and the phone recreates it) ----------
@@ -106,6 +108,10 @@ const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, 'http://x');
   if (url.pathname === '/health') return json(res, 200, { ok: true });
+  if (url.pathname === '/config.js') {
+    res.writeHead(200, { 'Content-Type': MIME['.js'], 'Cache-Control': 'no-cache' });
+    return res.end('window.MAPBOX_TOKEN = ' + JSON.stringify(MAPBOX_TOKEN) + ';');
+  }
   const shareApi = url.pathname.match(/^\/api\/share\/(update|end)$/);
   if (shareApi && req.method === 'POST') return handleShareApi(req, res, shareApi[1]);
   const shareGet = url.pathname.match(/^\/api\/share\/([A-Za-z0-9]{8,16})$/);

@@ -7,3 +7,6 @@ services:
     buildCommand: npm install
     startCommand: npm start
     healthCheckPath: /health
+    envVars:
+      - key: MAPBOX_TOKEN
+        sync: false   # paste your Mapbox public (pk.) token in Render → Environment
