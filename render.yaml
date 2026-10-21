@@ -1,0 +1,9 @@
+services:
+  - type: web
+    name: navigo-share
+    runtime: node
+    plan: free
+    autoDeploy: true
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /health

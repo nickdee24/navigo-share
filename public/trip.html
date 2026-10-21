@@ -1,0 +1,254 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0D0F12">
+  <title>Live trip</title>
+  <link rel="icon" href="/icon.svg">
+  <link rel="stylesheet" href="/vendor/leaflet.css">
+  <style>
+    :root {
+      --bg: #0D0F12; --panel: #171A1F; --alt: #23262C; --border: #2C3038;
+      --accent: #3B9EFF; --danger: #FF4D4D; --green: #4CAF50; --warn: #FFB020;
+      --text: #EEEEEE; --muted: #9AA4B2;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
+      font: 15px/1.35 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+    #map { position: fixed; inset: 0; background: #2B2F36; }
+    .leaflet-container { background: #2B2F36; }
+    .leaflet-control-attribution { background: rgba(13,15,18,.7) !important; color: var(--muted) !important; font-size: 10px; }
+    .leaflet-control-attribution a { color: var(--muted) !important; }
+
+    #card { position: fixed; left: 12px; right: 12px; top: calc(12px + env(safe-area-inset-top)); max-width: 480px; margin: 0 auto;
+      background: rgba(23,26,31,.94); border: 1px solid var(--border); border-radius: 14px; padding: 12px 14px;
+      box-shadow: 0 8px 24px rgba(0,0,0,.45); z-index: 1000; }
+    .row { display: flex; align-items: center; gap: 10px; }
+    #who { font-size: 17px; font-weight: 700; flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    #moodTag { font-size: 13px; color: var(--muted); font-weight: 500; }
+    #to { color: var(--muted); font-size: 14px; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    #to b { color: var(--text); font-weight: 600; }
+    .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 10px; }
+    .stat { background: var(--alt); border-radius: 10px; padding: 7px 10px; }
+    .stat .v { font-size: 18px; font-weight: 700; }
+    .stat .l { font-size: 12px; color: var(--muted); }
+    #status { display: flex; align-items: center; gap: 7px; margin-top: 10px; font-size: 13px; color: var(--muted); }
+    .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--muted); flex: none; }
+    .dot.live { background: var(--green); box-shadow: 0 0 8px var(--green); animation: pulse 2s infinite; }
+    .dot.stale { background: var(--warn); }
+    .dot.lost { background: var(--danger); }
+    @keyframes pulse { 50% { opacity: .45; } }
+    #progress { height: 4px; background: #2F343C; border-radius: 3px; margin-top: 10px; overflow: hidden; }
+    #progress > div { height: 100%; width: 0; background: var(--green); transition: width .6s; }
+
+    #follow { position: fixed; right: 14px; bottom: calc(22px + env(safe-area-inset-bottom)); z-index: 1000;
+      width: 50px; height: 50px; border-radius: 50%; border: 1px solid var(--border); background: rgba(23,26,31,.94);
+      color: var(--text); font-size: 22px; box-shadow: 0 6px 16px rgba(0,0,0,.45); cursor: pointer; }
+    #follow.on { color: var(--accent); border-color: var(--accent); }
+    #brand { position: fixed; left: 14px; bottom: calc(26px + env(safe-area-inset-bottom)); z-index: 1000;
+      font-size: 12px; color: var(--muted); background: rgba(23,26,31,.85); padding: 5px 10px; border-radius: 20px; }
+    #brand b { color: var(--accent); }
+
+    #msg { position: fixed; inset: 0; display: none; align-items: center; justify-content: center; z-index: 2000; padding: 20px; }
+    #msg.show { display: flex; }
+    #msg .box { background: var(--panel); border: 1px solid var(--border); border-radius: 14px; padding: 22px; max-width: 360px; text-align: center; }
+    #msg h2 { margin: 6px 0; font-size: 19px; }
+    #msg p { margin: 0; color: var(--muted); }
+
+    /* the person on the map: mood emoji or photo in a ring, with a little blue arrow showing their direction */
+    .me { position: relative; width: 56px; height: 56px; }
+    .me .face { position: absolute; inset: 6px; border-radius: 50%; background: #1D2127; border: 3px solid #fff;
+      display: flex; align-items: center; justify-content: center; font-size: 26px; overflow: hidden;
+      box-shadow: 0 3px 10px rgba(0,0,0,.6); }
+    .me .face img { width: 100%; height: 100%; object-fit: cover; }
+    .me .arrow { position: absolute; inset: 0; transition: transform .8s; }
+    .me .arrow::before { content: ""; position: absolute; left: 50%; top: -5px; transform: translateX(-50%);
+      border-left: 8px solid transparent; border-right: 8px solid transparent; border-bottom: 11px solid var(--accent);
+      filter: drop-shadow(0 0 1.5px #fff); }
+    .me.old .face { filter: grayscale(.8); opacity: .75; }
+    .flag { font-size: 30px; line-height: 1; filter: drop-shadow(0 2px 3px rgba(0,0,0,.6)); }
+  </style>
+</head>
+<body>
+  <div id="map"></div>
+
+  <div id="card">
+    <div class="row">
+      <div id="who">Loading trip…</div>
+      <span id="moodTag"></span>
+    </div>
+    <div id="to"></div>
+    <div class="stats" id="stats">
+      <div class="stat"><div class="v" id="arrive">--:--</div><div class="l">Arrival</div></div>
+      <div class="stat"><div class="v" id="left">--</div><div class="l">Time left</div></div>
+      <div class="stat"><div class="v" id="dist">--</div><div class="l">Distance</div></div>
+    </div>
+    <div id="progress"><div></div></div>
+    <div id="status"><span class="dot" id="dot"></span><span id="statusText">Connecting…</span></div>
+  </div>
+
+  <button id="follow" class="on" title="Follow">◎</button>
+  <div id="brand">Shared from <b>NaviGO</b></div>
+
+  <div id="msg"><div class="box"><div style="font-size:36px" id="msgIcon">🔗</div><h2 id="msgTitle"></h2><p id="msgText"></p></div></div>
+
+  <script src="/vendor/leaflet.js"></script>
+  <script>
+  'use strict';
+  const id = location.pathname.split('/').filter(Boolean)[1];
+  const MOODS = { '😀': 'Happy', '😢': 'Sad', '🤩': 'Excited', '😬': 'Nervous', '😠': 'Angry', '😎': "Vibin'",
+    '😴': 'Tired', '🥳': 'Celebrating', '🤔': 'Thinking', '😌': 'Chilled', '🤬': 'Raging', '🥶': 'Freezing' };
+  const $ = s => document.getElementById(s);
+
+  const map = L.map('map', { zoomControl: false, attributionControl: true }).setView([53.55, -2.63], 12);
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+    maxZoom: 19, subdomains: 'abcd',
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/">CARTO</a>'
+  }).addTo(map);
+
+  let follow = true, first = true, wasEnded = false, data = null, routeV = -1, photoV = -1;
+  let routePts = [], doneLine = null, todoCase = null, todoLine = null, me = null, flag = null;
+
+  $('follow').onclick = () => { follow = !follow; $('follow').classList.toggle('on', follow); if (follow) centre(true); };
+  map.on('dragstart', () => { follow = false; $('follow').classList.remove('on'); });
+
+  const pad2 = n => String(n).padStart(2, '0');
+  const clock = ms => { const d = new Date(ms); return pad2(d.getHours()) + ':' + pad2(d.getMinutes()); };
+  const dur = s => { const m = Math.max(0, Math.round(s / 60)); return m >= 60 ? Math.floor(m / 60) + ' h ' + pad2(m % 60) : m + ' min'; };
+  const miles = m => (m / 1609.344 < 10 ? (m / 1609.344).toFixed(1) : Math.round(m / 1609.344)) + ' mi';
+  function ago(ms) {
+    const s = Math.max(0, Math.round(ms / 1000));
+    if (s < 10) return 'just now';
+    if (s < 60) return s + ' seconds ago';
+    const m = Math.round(s / 60);
+    if (m < 60) return m + (m === 1 ? ' minute ago' : ' minutes ago');
+    const h = Math.round(m / 60); return h + (h === 1 ? ' hour ago' : ' hours ago');
+  }
+  function sq(a, b) { const k = Math.cos(a[0] * Math.PI / 180); return (a[0] - b[0]) ** 2 + ((a[1] - b[1]) * k) ** 2; }
+
+  function showMsg(icon, title, text) { $('msgIcon').textContent = icon; $('msgTitle').textContent = title; $('msgText').textContent = text; $('msg').classList.add('show'); }
+
+  function faceHtml(t) {
+    if (t.hasPhoto) return '<img src="/api/share/' + id + '/photo?v=' + t.photoV + '" alt="">';
+    return t.mood || '🚗';
+  }
+  function drawMe(t) {
+    if (t.lat == null || t.endedAt) return;
+    const ll = [t.lat, t.lng];
+    if (!me || photoV !== t.photoV) {
+      photoV = t.photoV;
+      const icon = L.divIcon({ className: '', iconSize: [56, 56], iconAnchor: [28, 28],
+        html: '<div class="me"><div class="arrow"></div><div class="face">' + faceHtml(t) + '</div></div>' });
+      if (me) me.setIcon(icon); else me = L.marker(ll, { icon, zIndexOffset: 1000 }).addTo(map);
+    }
+    me.setLatLng(ll);
+    const el = me.getElement();
+    if (el) {
+      const arrow = el.querySelector('.arrow');
+      const moving = t.heading != null && t.speed != null && t.speed > 1;
+      arrow.style.display = t.heading != null ? '' : 'none';
+      if (t.heading != null) arrow.style.transform = 'rotate(' + t.heading + 'deg)';
+      arrow.style.opacity = moving ? 1 : .55;
+      el.querySelector('.me').classList.toggle('old', Date.now() - t.updatedAt > 120000);
+    }
+  }
+  function drawRoute(t) {
+    if (t.routeV !== routeV) {
+      routeV = t.routeV;
+      routePts = t.route || [];
+      [doneLine, todoCase, todoLine].forEach(l => l && map.removeLayer(l));
+      doneLine = todoCase = todoLine = null;
+      if (routePts.length > 1) {
+        doneLine = L.polyline([], { color: '#8A94A6', weight: 6, opacity: .6 }).addTo(map);
+        todoCase = L.polyline([], { color: '#0D0F12', weight: 10, opacity: .9 }).addTo(map);
+        todoLine = L.polyline([], { color: '#3B9EFF', weight: 6 }).addTo(map);
+      }
+    }
+    if (routePts.length > 1) {
+      // Split the route where they are: driven part grey, the rest blue.
+      let k = 0;
+      if (t.lat != null) { let best = Infinity; routePts.forEach((p, i) => { const d = sq(p, [t.lat, t.lng]); if (d < best) { best = d; k = i; } }); }
+      const here = t.lat != null ? [t.lat, t.lng] : routePts[0];
+      doneLine.setLatLngs(routePts.slice(0, k + 1).concat([here]));
+      const rest = [here].concat(routePts.slice(k + 1));
+      todoCase.setLatLngs(rest); todoLine.setLatLngs(rest);
+      $('progress').firstElementChild.style.width = Math.round(k / (routePts.length - 1) * 100) + '%';
+    }
+    if (t.dest) {
+      const ll = [t.dest.lat, t.dest.lng];
+      if (!flag) flag = L.marker(ll, { icon: L.divIcon({ className: '', html: '<div class="flag">🚩</div>', iconSize: [30, 30], iconAnchor: [6, 28] }) }).addTo(map);
+      else flag.setLatLng(ll);
+    } else if (flag) { map.removeLayer(flag); flag = null; }
+  }
+  function centre(animate) {
+    if (!data || data.lat == null) return;
+    if (first && data.dest) {
+      const b = L.latLngBounds([[data.lat, data.lng], [data.dest.lat, data.dest.lng]]);
+      if (routePts.length) routePts.forEach(p => b.extend(p));
+      map.fitBounds(b, { paddingTopLeft: [30, 230], paddingBottomRight: [30, 40] });
+    } else if (first) map.setView([data.lat, data.lng], 15);
+    else map.panTo([data.lat, data.lng], { animate });
+    first = false;
+  }
+
+  function render() {
+    const t = data; if (!t) return;
+    const moodName = MOODS[t.mood];
+    $('who').textContent = t.name + (t.endedAt ? '' : ' is ' + (t.dest ? 'driving' : 'sharing their location'));
+    $('moodTag').textContent = t.mood ? t.mood + (moodName ? ' ' + moodName : '') : '';
+    document.title = t.name + "'s live trip";
+    $('to').innerHTML = t.dest ? 'To <b></b>' : 'No destination set';
+    if (t.dest) $('to').querySelector('b').textContent = t.dest.name;
+    $('stats').style.display = t.dest && !t.endedAt ? '' : 'none';
+    $('progress').style.display = t.dest && !t.endedAt ? '' : 'none';
+    if (t.eta) {
+      $('arrive').textContent = clock(t.eta);
+      $('left').textContent = dur((t.eta - Date.now()) / 1000);
+    }
+    if (t.remainingM != null) $('dist').textContent = miles(t.remainingM);
+
+    const age = Date.now() - (t.updatedAt || 0);
+    const dot = $('dot');
+    dot.className = 'dot ' + (t.endedAt ? '' : age < 45000 ? 'live' : age < 180000 ? 'stale' : 'lost');
+    let s;
+    if (t.endedAt) s = (t.arrived ? '🏁 Arrived ' : 'Stopped sharing ') + ago(Date.now() - t.endedAt) + ' · this page updates by itself when they share again';
+    else if (t.lat == null) s = 'Waiting for their location…';
+    else s = (age < 45000 ? 'Live · ' : 'Signal lost · ') + 'location updated ' + ago(age);
+    if (!t.endedAt && t.speed != null && age < 45000) s += ' · ' + Math.round(t.speed * 2.23694) + ' mph';
+    $('statusText').textContent = s;
+    if (t.endedAt) {
+      $('who').textContent = t.name + (t.arrived ? ' has arrived' : " isn't sharing right now");
+      $('to').innerHTML = t.arrived && t.lastDest ? 'At <b></b>' : 'Their location is hidden until they share a trip again';
+      if (t.arrived && t.lastDest) $('to').querySelector('b').textContent = t.lastDest;
+      if (me) { map.removeLayer(me); me = null; }
+    }
+  }
+
+  async function poll() {
+    try {
+      const r = await fetch('/api/share/' + id, { cache: 'no-store' });
+      if (r.status === 404) { showMsg('🔗', 'Nothing shared yet', "Nobody is sharing a trip on this link right now. This page will update by itself when they do."); return setTimeout(poll, 15000); }
+      if (!r.ok) throw new Error(r.status);
+      data = await r.json();
+      // clock difference between this device and the server, so "updated x ago" is right
+      const skew = Date.now() - data.now;
+      ['updatedAt', 'endedAt', 'startedAt', 'eta'].forEach(k => { if (data[k]) data[k] += skew; });
+      $('msg').classList.remove('show');
+      if (!data.endedAt && wasEnded) first = true;   // a new trip on the same link: zoom to it again
+      wasEnded = !!data.endedAt;
+      drawRoute(data); drawMe(data);
+      if (follow || first) centre(true);
+      render();
+    } catch (e) {
+      $('statusText').textContent = 'Reconnecting… (the server can take a minute to wake up)';
+      $('dot').className = 'dot stale';
+    }
+    setTimeout(poll, data && data.endedAt ? 10000 : 4000);
+  }
+  setInterval(render, 1000);   // keep "updated x seconds ago" ticking
+  if (!/^[A-Za-z0-9]{8,16}$/.test(id || '')) showMsg('🔗', 'Bad link', 'This trip link is not complete.');
+  else poll();
+  </script>
+</body>
+</html>
