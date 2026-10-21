@@ -33,6 +33,15 @@
     #where { color: var(--text); font-size: 14px; margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     #where:empty { display: none; }
     #where .pin { color: var(--accent); }
+    /* what they're listening to, in the card */
+    #song { display: none; align-items: center; gap: 7px; margin-top: 6px; font-size: 13px; min-width: 0; }
+    #song.show { display: flex; }
+    #song .tag { flex: none; font-size: 10px; font-weight: 800; padding: 1px 6px; border-radius: 4px; background: var(--alt); }
+    #song .tag.spotify { background: #1DB954; color: #000; }
+    #song .tag.youtube { background: #FF0033; color: #fff; }
+    #song .st { flex: none; font-size: 11px; color: var(--green); }
+    #song .st.paused { color: var(--muted); }
+    #song .txt { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
     .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 10px; }
     .stat { background: var(--alt); border-radius: 10px; padding: 7px 10px; }
     .stat .v { font-size: 18px; font-weight: 700; }
@@ -95,6 +104,7 @@
     </div>
     <div id="to"></div>
     <div id="where"></div>
+    <div id="song"><span class="tag"></span><span class="st"></span><span class="txt"></span></div>
     <div class="stats" id="stats">
       <div class="stat"><div class="v" id="arrive">--:--</div><div class="l">Arrival</div></div>
       <div class="stat"><div class="v" id="left">--</div><div class="l">Time left</div></div>
@@ -245,6 +255,16 @@
       const town = [pl.area, pl.town].filter(Boolean).join(', ');
       const text = pl.road ? pl.road + (town ? ' · ' + town : '') : town;
       if (text) { $('where').innerHTML = '<span class="pin">📍</span> '; $('where').append(document.createTextNode(text)); }
+    }
+    // what they're listening to
+    const m = !t.endedAt && t.music, song = $('song');
+    song.classList.toggle('show', !!m);
+    if (m) {
+      const tag = song.querySelector('.tag');
+      tag.textContent = m.player || 'Music'; tag.className = 'tag ' + (m.player || '').toLowerCase();
+      const st = song.querySelector('.st');
+      st.textContent = m.playing ? '▶' : '❚❚'; st.className = 'st' + (m.playing ? '' : ' paused');
+      song.querySelector('.txt').textContent = [m.artist, m.title].filter(Boolean).join(' – ');
     }
     $('stats').style.display = t.dest && !t.endedAt ? '' : 'none';
     $('progress').style.display = t.dest && !t.endedAt ? '' : 'none';
