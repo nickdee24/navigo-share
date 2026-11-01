@@ -618,7 +618,7 @@
         $('locate').classList.add('on'); setTimeout(() => $('locate').classList.remove('on'), 1200);
         if (fly) map.flyTo({ center: [me.lng, me.lat], zoom: 13 });
         res(me);
-      }, () => res(null), { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 });
+      }, () => res(null), { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 });
     });
   }
 

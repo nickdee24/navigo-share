@@ -241,7 +241,7 @@ async function spotifySearch(q) {
 }
 
 // ---------- http ----------
-const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css', '.png': 'image/png', '.svg': 'image/svg+xml' };
+const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css', '.png': 'image/png', '.svg': 'image/svg+xml', '.glb': 'model/gltf-binary' };
 
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, 'http://x');

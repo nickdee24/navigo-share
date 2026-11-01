@@ -93,6 +93,8 @@
     #busesTip { position: fixed; right: 72px; bottom: calc(92px + env(safe-area-inset-bottom)); z-index: 1000; font-size: 12px; color: var(--text);
       background: rgba(23,26,31,.94); border: 1px solid var(--border); border-radius: 10px; padding: 5px 9px; display: none; }
     .lbus { position: relative; width: 16px; height: 36px; pointer-events: auto; cursor: pointer; }
+    .lbus.in3d img { opacity: 0; }   /* zoomed in: drawn in 3D */
+    .lbus img { position: absolute; left: 3px; top: 0; width: 10px; height: 36px; transition: transform .8s; filter: drop-shadow(0 1px 2px rgba(0,0,0,.6)); }
     .lbus svg { position: absolute; inset: 0; transition: transform .8s; filter: drop-shadow(0 1px 2px rgba(0,0,0,.6)); }
     .lbus b { position: absolute; left: 50%; bottom: 34px; transform: translateX(-50%); font: 800 11px ui-monospace, Menlo, monospace; color: #FFB020;
       background: #111; border-radius: 4px; padding: 0 3px; white-space: nowrap; }
@@ -131,9 +133,10 @@
     .me .busSign { position: absolute; left: 50%; top: 54px; transform: translateX(-50%); display: none; background: #111; color: #FFB020;
       border: 2px solid #fff; border-radius: 7px; padding: 0 7px; font-weight: 800; font-size: 14px; white-space: nowrap; box-shadow: 0 2px 6px rgba(0,0,0,.6); }
     .me .busSign.show { display: block; cursor: pointer; pointer-events: auto; }
-    .me .busIcon { display: none; position: absolute; left: 50%; top: 50%; width: 30px; height: 72px; margin: -36px 0 0 -15px;
+    .me .busIcon { display: none; position: absolute; left: 50%; top: 50%; width: 22px; height: 92px; margin: -46px 0 0 -11px;
       transition: transform .8s; filter: drop-shadow(0 2px 3px rgba(0,0,0,.6)); cursor: pointer; }
     .me.onbus .busIcon { display: block; }
+    .me.onbus.bus3d .busIcon { display: none; }   /* zoomed in: the 3D bus is drawn instead */
     .me.onbus .arrow { display: none !important; }
     .me.onbus .face { inset: auto; left: 8px; top: -112px; width: 40px; height: 40px; font-size: 22px; border-width: 2px; }
     .me.onbus .busSign { top: -68px; }
@@ -300,10 +303,7 @@
       const el = document.createElement('div'); el.style.zIndex = 5;
       el.innerHTML = '<div class="me"><div class="np"><span class="tag"></span><span class="st"></span><span class="txt"></span><span class="time"></span></div>' +
         '<div class="arrow"></div><div class="face"></div><div class="busSign"></div>' +
-        '<svg class="busIcon" viewBox="0 0 30 72"><rect x="1" y="1" width="28" height="70" rx="6" fill="#00A9A4" stroke="#fff" stroke-width="2"/>' +
-        '<rect x="5" y="13" width="20" height="53" rx="3" fill="#F4F2EA"/><path d="M5 45 25 36v5L5 50Z" fill="#00A9A4"/>' +
-        '<rect x="4" y="4" width="22" height="8" rx="3" fill="#20303A"/><rect x="10" y="22" width="10" height="4" rx="2" fill="#C9D3D8"/>' +
-        '<rect x="10" y="56" width="10" height="4" rx="2" fill="#C9D3D8"/></svg></div>';
+        '<img class="busIcon" src="/bus_top.png" alt=""></div>';
       me = new mapboxgl.Marker({ element: el }).setLngLat(ll).addTo(map);
       // on the bus: tap the icon or its sign for the bus's stops
       el.addEventListener('click', e => { if (data && data.mode === 'bus' && data.bus) { e.stopPropagation(); busOpen = !busOpen; fillBusPanel(data); } });
@@ -551,7 +551,7 @@
   let busesOn = true;
   try { busesOn = localStorage.getItem('navigoBuses') !== 'off'; } catch (e) {}
   let busMarks = [], busTimer = null;
-  const miniBus = '<svg viewBox="0 0 16 36"><rect x=".8" y=".8" width="14.4" height="34.4" rx="3.5" fill="#00A9A4" stroke="#fff" stroke-width="1.4"/><rect x="3" y="7" width="10" height="26" rx="2" fill="#F4F2EA"/><rect x="2.5" y="2.5" width="11" height="4" rx="1.5" fill="#20303A"/></svg>';
+  const miniBus = '<img src="/bus_top.png" alt="">';
   function tip(text) { const t = $('busesTip'); t.textContent = text; t.style.display = 'block'; clearTimeout(tip.h); tip.h = setTimeout(() => t.style.display = 'none', 2500); }
   // Each bus keeps its own marker and glides to its new spot over the next update period, so buses move smoothly.
   const BUS_POLL = 10000;
@@ -624,7 +624,7 @@
           const el = document.createElement('div'); el.className = 'lbus';
           el.innerHTML = miniBus + '<b></b>';
           el.addEventListener('click', ev => { ev.stopPropagation(); tip(el.title); });
-          o = { el, svg: el.querySelector('svg'), m: new mapboxgl.Marker({ element: el }).setLngLat(pos).addTo(map), from: pos, to: pos, t0: now };
+          o = { el, svg: el.querySelector('img'), m: new mapboxgl.Marker({ element: el }).setLngLat(pos).addTo(map), from: pos, to: pos, t0: now };
           buses.set(id, o);
         } else {
           const cur = o.m.getLngLat().toArray();
@@ -634,12 +634,50 @@
         o.el.querySelector('b').textContent = showNum ? v.line : '';
         o.el.title = 'Bus ' + v.line + (v.dest ? ' to ' + v.dest : '');
         o.svg.style.transform = 'rotate(' + (heading || 0) + 'deg) scale(' + size + ')';
+        o.line = v.line; o.el.classList.toggle('in3d', z >= BUS3D_ZOOM);
       });
       buses.forEach((o, id) => { if (!seen.has(id)) { o.m.remove(); buses.delete(id); } });
+      hideMyBusTwin();
     } catch (e) { /* try again next time */ }
+  }
+  // On the bus: the moving bus is you, so hide the same bus from the live-bus layer (your marker is it)
+  function myRide() { return data && data.mode === 'bus' && data.bus && data.bus.riding && data.lat != null && !data.endedAt ? data : null; }
+  function hideMyBusTwin() {
+    const r = myRide(); let twin = null, best = 120;
+    if (r) buses.forEach((o, id) => {
+      const d = metres(o.m.getLngLat().toArray(), [r.lng, r.lat]);
+      if (o.line === r.bus.service && d < best) { best = d; twin = id; }
+    });
+    buses.forEach((o, id) => { o.el.style.display = id === twin ? 'none' : ''; o.twin = id === twin; });
+  }
+  // 3D buses (Nick's Arriva bus) when zoomed in
+  const BUS3D_ZOOM = 14;
+  function add3dBuses() {
+    try {
+      if (!map.hasModel || !map.hasModel('arriva-bus')) map.addModel('arriva-bus', location.origin + '/arriva_bus.glb');
+      if (!map.getSource('live-bus-3d')) map.addSource('live-bus-3d', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+      if (!map.getLayer('live-bus-3d')) map.addLayer({ id: 'live-bus-3d', type: 'model', source: 'live-bus-3d', minzoom: BUS3D_ZOOM,
+        layout: { 'model-id': 'arriva-bus' },
+        paint: { 'model-type': 'common-3d', 'model-rotation': ['get', 'rot'],
+          'model-scale': ['interpolate', ['linear'], ['zoom'], 14, ['literal', [7, 7, 7]], 17, ['literal', [2.2, 2.2, 2.2]], 20, ['literal', [1.2, 1.2, 1.2]]] } });
+    } catch (e) { console.log('3D buses not available', e); }
+  }
+  map.on('style.load', add3dBuses);
+  let last3d = 0;
+  function update3d(now) {
+    if (now - last3d < 150 || !map.getSource) return; last3d = now;
+    const src = map.getSource('live-bus-3d'); if (!src || !src.setData) return;
+    const on = map.getZoom() >= BUS3D_ZOOM, feats = [];
+    if (on) {
+      buses.forEach(o => { if (!o.twin) feats.push({ type: 'Feature', properties: { rot: [0, 0, (o.heading || 0) - 90] }, geometry: { type: 'Point', coordinates: o.m.getLngLat().toArray() } }); });
+      const r = myRide(); if (r && me) feats.push({ type: 'Feature', properties: { rot: [0, 0, (r.heading || 0) - 90] }, geometry: { type: 'Point', coordinates: me.getLngLat().toArray() } });
+    }
+    const meEl = me && me.getElement().querySelector('.me'); if (meEl) meEl.classList.toggle('bus3d', on && !!myRide());
+    src.setData({ type: 'FeatureCollection', features: feats });
   }
   (function glide() {
     const now = performance.now();
+    update3d(now);
     buses.forEach(o => {
       if (o.from === o.to) return;
       const t = Math.min(1, (now - o.t0) / BUS_POLL);
