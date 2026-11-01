@@ -118,7 +118,32 @@
     .np .txt { white-space: normal; overflow-wrap: anywhere; line-height: 1.3; }
     .me .busSign { position: absolute; left: 50%; top: 54px; transform: translateX(-50%); display: none; background: #111; color: #FFB020;
       border: 2px solid #fff; border-radius: 7px; padding: 0 7px; font-weight: 800; font-size: 14px; white-space: nowrap; box-shadow: 0 2px 6px rgba(0,0,0,.6); }
-    .me .busSign.show { display: block; }
+    .me .busSign.show { display: block; cursor: pointer; pointer-events: auto; }
+    .me .busSign .l1 { font-family: ui-monospace, "Cascadia Mono", Menlo, monospace; font-size: 15px; }
+    .me .busSign .l2 { font-family: ui-monospace, "Cascadia Mono", Menlo, monospace; font-size: 11px; text-align: center; }
+    .ontime { color: #3DDC84; } .lateTime { color: #FFB020; } .lateBy { color: #FF4D4D; }
+    .me .face { cursor: pointer; }
+    /* tap the bus: its journey, train-style */
+    #busPanel { position: fixed; left: 12px; right: 12px; bottom: calc(84px + env(safe-area-inset-bottom)); max-width: 480px; margin: 0 auto;
+      z-index: 1100; display: none; background: rgba(23,26,31,.97); border: 1px solid var(--border); border-radius: 14px; padding: 12px 14px;
+      box-shadow: 0 8px 24px rgba(0,0,0,.5); max-height: 60vh; overflow: auto; }
+    #busPanel.show { display: block; }
+    #busPanel .hd { display: flex; align-items: center; gap: 10px; }
+    #busPanel .hd .svc { font-size: 18px; padding: 2px 8px; }
+    #busPanel .dest { font-weight: 700; font-size: 16px; flex: 1; }
+    #busPanel .x { background: none; border: 0; color: var(--muted); font-size: 20px; cursor: pointer; }
+    #busPanel .sub { color: var(--muted); font-size: 13px; margin-top: 4px; }
+    #busPanel .arr { font-weight: 700; margin-top: 4px; }
+    #busPanel h4 { margin: 10px 0 4px; font-size: 12px; color: var(--muted); }
+    #busPanel ol { list-style: none; margin: 0; padding: 0; }
+    #busPanel li { position: relative; display: flex; justify-content: space-between; gap: 8px; padding: 6px 0 6px 26px; font-size: 14px; }
+    #busPanel li::before { content: ""; position: absolute; left: 8px; top: 0; bottom: 0; width: 3px; background: #FFB020; }
+    #busPanel li:first-child::before { top: 50%; } #busPanel li:last-child::before { bottom: 50%; }
+    #busPanel li::after { content: ""; position: absolute; left: 3px; top: 50%; width: 9px; height: 9px; margin-top: -6.5px; border-radius: 50%;
+      background: #fff; border: 2px solid #FFB020; }
+    #busPanel li:first-child, #busPanel li:last-child { font-weight: 700; }
+    #busPanel li:first-child::after, #busPanel li:last-child::after { background: #FFB020; }
+    #busPanel li .tm { flex: none; font-variant-numeric: tabular-nums; }
     .flag { font-size: 30px; line-height: 1; filter: drop-shadow(0 2px 3px rgba(0,0,0,.6)); }
   </style>
 </head>
@@ -156,6 +181,7 @@
     </div>
   </div>
 
+  <div id="busPanel"></div>
   <button id="follow" class="on" title="Follow">◎</button>
   <div id="brand">Shared from <b>NaviGO</b></div>
 
@@ -253,6 +279,8 @@
       el.innerHTML = '<div class="me"><div class="np"><span class="tag"></span><span class="st"></span><span class="txt"></span><span class="time"></span></div>' +
         '<div class="arrow"></div><div class="face"></div><div class="busSign"></div></div>';
       me = new mapboxgl.Marker({ element: el }).setLngLat(ll).addTo(map);
+      // on the bus: tap the icon or its sign for the bus's stops
+      el.addEventListener('click', e => { if (data && data.mode === 'bus' && data.bus) { e.stopPropagation(); busOpen = !busOpen; fillBusPanel(data); } });
       photoV = -1;
     }
     if (photoV !== t.photoV) { photoV = t.photoV; me.getElement().querySelector('.face').innerHTML = faceHtml(t); }
@@ -268,7 +296,16 @@
       // on the bus: the bus number under the face
       const sign = el.querySelector('.busSign'), bus = t.mode === 'bus' && t.bus;
       sign.classList.toggle('show', !!bus);
-      if (bus) sign.textContent = bus.service;
+      if (bus) {
+        // like the app: number, arrival time (green on time / orange + red minutes late), stops left
+        const late = (bus.delayMin || 0) >= 2;
+        let h = '<div class="l1"></div>';
+        if (bus.eta) h = '<div class="l1"><span class="n"></span> <span class="' + (late ? 'lateTime' : 'ontime') + '">' + clock(bus.eta) + '</span>' +
+          (late ? ' <span class="lateBy">+' + bus.delayMin + '</span>' : '') + '</div>';
+        if (bus.stopsLeft != null) h += '<div class="l2">' + bus.stopsLeft + (bus.stopsLeft === 1 ? ' stop left' : ' stops left') + '</div>';
+        if (sign.dataset.h !== h + bus.service) { sign.innerHTML = h; sign.dataset.h = h + bus.service; (sign.querySelector('.n') || sign.querySelector('.l1')).textContent = bus.service; }
+      }
+      if (busOpen) fillBusPanel(t);
       // what they're listening to, above the icon (the radio takes Spotify's place, like in the app)
       const np = el.querySelector('.np'), m = t.radio ? null : t.music;
       np.classList.toggle('show', !!(m || t.radio));
@@ -286,6 +323,29 @@
       }
     }
   }
+  // The bus's journey: where it's going, street, arrival (late or on time), stops left and a train-style list
+  let busOpen = false;
+  function fillBusPanel(t) {
+    const p = $('busPanel'), b = t && t.mode === 'bus' && !t.endedAt && t.bus;
+    p.classList.toggle('show', !!(busOpen && b));
+    if (!busOpen || !b) return;
+    const late = (b.delayMin || 0) >= 2;
+    const esc = x => String(x == null ? '' : x).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+    let h = '<div class="hd"><span class="svc">' + esc(b.service) + '</span><span class="dest">' + esc(b.destination ? 'to ' + b.destination : b.heading || 'Bus ' + b.service) +
+      '</span><button class="x" aria-label="Close">✕</button></div>';
+    if (b.street) h += '<div class="sub">Now on ' + esc(b.street) + '</div>';
+    if (b.eta) h += '<div class="arr"><span class="' + (late ? 'lateTime' : 'ontime') + '">Arrives ' + clock(b.eta) + '</span>' +
+      (late ? ' <span class="lateBy">+' + b.delayMin + ' min</span>' : ' <span class="ontime" style="font-weight:400;font-size:13px">On time</span>') + '</div>';
+    if (b.stopsLeft != null) h += '<div class="sub">' + b.stopsLeft + (b.stopsLeft === 1 ? ' stop left' : ' stops left') + '</div>';
+    if (b.stops && b.stops.length) {
+      h += '<h4>Stopping at</h4><ol>' + b.stops.map(x => '<li><span>' + esc(x.name) + '</span><span class="tm ' + (late ? 'lateTime' : 'ontime') + '">' +
+        (x.t ? clock(x.t) : '') + '</span></li>').join('') + '</ol>';
+    } else h += '<div class="sub">The bus\'s stops aren\'t available right now.</div>';
+    p.innerHTML = h;
+    p.querySelector('.x').onclick = () => { busOpen = false; p.classList.remove('show'); };
+  }
+  map.on('click', () => { if (busOpen) { busOpen = false; $('busPanel').classList.remove('show'); } });
+
   // Radio station: its logo (or a RADIO tag), play / pause, name and genre
   function fillRadio(box, r) {
     let tag = box.querySelector('.tag, img.logo');
@@ -443,6 +503,7 @@
       const skew = Date.now() - data.now;
       ['updatedAt', 'endedAt', 'startedAt', 'eta'].forEach(k => { if (data[k]) data[k] += skew; });
       if (data.music && data.music.at) data.music.at += skew;
+      if (data.bus) { if (data.bus.eta) data.bus.eta += skew; (data.bus.stops || []).forEach(x => { if (x.t) x.t += skew; }); }
       $('msg').classList.remove('show');
       if (!data.endedAt && wasEnded) first = true;   // a new trip on the same link: zoom to it again
       wasEnded = !!data.endedAt;

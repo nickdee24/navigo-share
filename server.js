@@ -110,7 +110,15 @@ async function handleShareApi(req, res, action) {
   // Car / bus / walking: the mode picked in the app, and what you're doing now (driving, stopped, bus, walking)
   if (b.mode !== undefined) t.mode = ['car', 'bus', 'walk'].includes(b.mode) ? b.mode : 'car';
   if (b.activity !== undefined) t.activity = ['driving', 'stopped', 'bus', 'walking'].includes(b.activity) ? b.activity : null;
-  if (b.bus && b.bus.service) t.bus = { service: String(b.bus.service).slice(0, 8), heading: String(b.bus.heading || '').slice(0, 60) };
+  if (b.bus && b.bus.service) {
+    t.bus = { service: String(b.bus.service).slice(0, 8), heading: String(b.bus.heading || '').slice(0, 60) };
+    // the bus's journey (when known): where it's going, arrival time, minutes late, stops left and the stops to come
+    if (b.bus.destination !== undefined) {
+      Object.assign(t.bus, { destination: String(b.bus.destination || '').slice(0, 80), street: String(b.bus.street || '').slice(0, 80),
+        eta: num(b.bus.eta), delayMin: num(b.bus.delayMin) || 0, stopsLeft: num(b.bus.stopsLeft),
+        stops: Array.isArray(b.bus.stops) ? b.bus.stops.slice(0, 60).map(x => ({ name: String((x && x.name) || '').slice(0, 80), t: num(x && x.t) })) : [] });
+    }
+  }
   else if (b.bus !== undefined) t.bus = null;
   const lat = num(b.lat), lng = num(b.lng);
   if (lat != null && lng != null && Math.abs(lat) <= 90 && Math.abs(lng) <= 180) {
