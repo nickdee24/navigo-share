@@ -16,27 +16,43 @@
     * { box-sizing: border-box; }
     html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
       font: 15px/1.35 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
-    #map { position: fixed; inset: 0; background: #2B2F36; }
+    #map { position: fixed; inset: 0; background: #272E3A; }
     .mapboxgl-ctrl-attrib { background: rgba(13,15,18,.7) !important; }
     .dark-tiles { filter: invert(1) hue-rotate(180deg) brightness(.85) contrast(.9) saturate(.4); }
 
     #card { position: fixed; left: 12px; right: 12px; top: calc(12px + env(safe-area-inset-top)); max-width: 480px; margin: 0 auto;
-      background: rgba(23,26,31,.94); border: 1px solid var(--border); border-radius: 14px; padding: 12px 14px;
-      box-shadow: 0 8px 24px rgba(0,0,0,.45); z-index: 1000; }
+      z-index: 1000; display: flex; flex-direction: column; gap: 8px; }
+    .box { background: rgba(23,26,31,.94); border: 1px solid var(--border); border-radius: 14px; padding: 10px 14px;
+      box-shadow: 0 8px 24px rgba(0,0,0,.45); }
+    #liveBox { display: flex; align-items: center; gap: 8px; font-size: 14px; color: var(--text); padding: 9px 14px; }
+    #placeBox:empty, #placeBox.empty { display: none; }
+    /* what they're doing: icon + Driving / Not moving / On the bus / Walking */
+    #doing { display: flex; align-items: center; gap: 12px; }
+    #actIcon { flex: none; width: 42px; height: 42px; border-radius: 12px; background: var(--alt); display: flex; align-items: center; justify-content: center; }
+    #actIcon svg { width: 28px; height: 28px; }
+    #actIcon.driving { background: rgba(59,158,255,.18); }
+    #actIcon.bus { background: rgba(0,169,164,.22); }
+    #actIcon.walking { background: rgba(76,175,80,.2); }
+    #actText { font-size: 17px; font-weight: 700; }
+    #actSub { font-size: 13px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .svc { display: inline-block; background: #111; color: #FFB020; border: 1px solid #444; border-radius: 6px; padding: 0 6px;
+      font-weight: 800; font-size: 14px; margin-right: 6px; font-variant-numeric: tabular-nums; }
     .row { display: flex; align-items: center; gap: 10px; }
-    #who { font-size: 17px; font-weight: 700; flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    #who { font-weight: 600; color: var(--text); }
     #moodTag { font-size: 13px; color: var(--muted); font-weight: 500; }
-    #to { color: var(--muted); font-size: 14px; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    #to { color: var(--muted); font-size: 14px; margin-top: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     #to b { color: var(--text); font-weight: 600; }
-    #where { color: var(--text); font-size: 14px; margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    #where { color: var(--text); font-size: 15px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     #where:empty { display: none; }
     #where .pin { color: var(--accent); }
     /* what they're listening to, in the card */
-    #song { display: none; align-items: flex-start; gap: 7px; margin-top: 6px; font-size: 13px; min-width: 0; }
+    #song { display: none; align-items: flex-start; gap: 7px; margin-top: 10px; font-size: 13px; min-width: 0; }
     #song.show { display: flex; }
     #song .tag { flex: none; font-size: 10px; font-weight: 800; padding: 1px 6px; border-radius: 4px; background: var(--alt); }
     #song .tag.spotify { background: #1DB954; color: #000; }
     #song .tag.youtube { background: #FF0033; color: #fff; }
+    #song .tag.radio, .np .tag.radio { background: #E9EDF3; color: #111; }
+    #song img.logo, .np img.logo { flex: none; width: 22px; height: 22px; border-radius: 5px; background: #fff; object-fit: contain; }
     #song .st { flex: none; font-size: 11px; color: var(--green); }
     #song .st.paused { color: var(--muted); }
     #song .txt { white-space: normal; overflow-wrap: anywhere; min-width: 0; line-height: 1.3; }
@@ -51,7 +67,6 @@
     .stat { background: var(--alt); border-radius: 10px; padding: 7px 10px; }
     .stat .v { font-size: 18px; font-weight: 700; }
     .stat .l { font-size: 12px; color: var(--muted); }
-    #status { display: flex; align-items: center; gap: 7px; margin-top: 10px; font-size: 13px; color: var(--muted); }
     .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--muted); flex: none; }
     .dot.live { background: var(--green); box-shadow: 0 0 8px var(--green); animation: pulse 2s infinite; }
     .dot.stale { background: var(--warn); }
@@ -101,6 +116,9 @@
     .np .st { flex: none; font-size: 10px; color: var(--green); }
     .np .st.paused { color: var(--muted); }
     .np .txt { white-space: normal; overflow-wrap: anywhere; line-height: 1.3; }
+    .me .busSign { position: absolute; left: 50%; top: 54px; transform: translateX(-50%); display: none; background: #111; color: #FFB020;
+      border: 2px solid #fff; border-radius: 7px; padding: 0 7px; font-weight: 800; font-size: 14px; white-space: nowrap; box-shadow: 0 2px 6px rgba(0,0,0,.6); }
+    .me .busSign.show { display: block; }
     .flag { font-size: 30px; line-height: 1; filter: drop-shadow(0 2px 3px rgba(0,0,0,.6)); }
   </style>
 </head>
@@ -108,27 +126,34 @@
   <div id="map"></div>
 
   <div id="card">
-    <div class="row">
-      <div id="who">Loading trip…</div>
-      <span id="moodTag"></span>
-    </div>
-    <div id="to"></div>
-    <div id="where"></div>
-    <div id="song"><span class="tag"></span><span class="st"></span><span class="txt"></span><span class="time"></span></div>
-    <div id="songBar"><div></div></div>
-    <div class="stats" id="stats">
-      <div class="stat"><div class="v" id="arrive">--:--</div><div class="l">Arrival</div></div>
-      <div class="stat"><div class="v" id="left">--</div><div class="l">Time left</div></div>
-      <div class="stat"><div class="v" id="dist">--</div><div class="l">Distance</div></div>
-    </div>
-    <div id="progress">
-      <svg class="flagIc" viewBox="0 0 18 22" aria-label="Start"><line x1="3" y1="2" x2="3" y2="21" stroke="#fff" stroke-width="2" stroke-linecap="round"/><path d="M4 2.5c4-1.6 8 1.6 12 .3v8.4c-4 1.4-8-1.8-12-.2Z" fill="#3B9EFF"/></svg>
-      <div class="track"><div class="fill"></div>
-        <svg class="car" viewBox="0 0 26 16" aria-label="Car"><rect x="1" y="2" width="24" height="12" rx="4" fill="#3B9EFF" stroke="#fff" stroke-width="1.5"/><rect x="14" y="4" width="5" height="8" rx="1.5" fill="#9FD3F5"/><rect x="4" y="4.5" width="4" height="7" rx="1.2" fill="#5E7F96"/><circle cx="23.5" cy="4.5" r="1" fill="#FFF59D"/><circle cx="23.5" cy="11.5" r="1" fill="#FFF59D"/></svg>
+    <!-- 1. live: when the location last came in, and the speed -->
+    <div class="box" id="liveBox"><span class="dot" id="dot"></span><span id="statusText">Connecting…</span></div>
+    <!-- 2. where they are now (and where they're going) -->
+    <div class="box" id="placeBox">
+      <div id="where"></div>
+      <div id="to"></div>
+      <div class="stats" id="stats">
+        <div class="stat"><div class="v" id="arrive">--:--</div><div class="l">Arrival</div></div>
+        <div class="stat"><div class="v" id="left">--</div><div class="l">Time left</div></div>
+        <div class="stat"><div class="v" id="dist">--</div><div class="l">Distance</div></div>
       </div>
-      <svg class="flagIc" viewBox="0 0 18 22" aria-label="Finish"><defs><pattern id="chq" width="4" height="4" patternUnits="userSpaceOnUse"><rect width="4" height="4" fill="#fff"/><rect width="2" height="2" fill="#111"/><rect x="2" y="2" width="2" height="2" fill="#111"/></pattern></defs><line x1="3" y1="2" x2="3" y2="21" stroke="#fff" stroke-width="2" stroke-linecap="round"/><path d="M4 2.5h12.5v8.5H4Z" fill="url(#chq)" stroke="#fff" stroke-width=".8"/></svg>
+      <div id="progress">
+        <svg class="flagIc" viewBox="0 0 18 22" aria-label="Start"><line x1="3" y1="2" x2="3" y2="21" stroke="#fff" stroke-width="2" stroke-linecap="round"/><path d="M4 2.5c4-1.6 8 1.6 12 .3v8.4c-4 1.4-8-1.8-12-.2Z" fill="#3B9EFF"/></svg>
+        <div class="track"><div class="fill"></div>
+          <svg class="car" viewBox="0 0 26 16" aria-label="Car"><rect x="1" y="2" width="24" height="12" rx="4" fill="#3B9EFF" stroke="#fff" stroke-width="1.5"/><rect x="14" y="4" width="5" height="8" rx="1.5" fill="#9FD3F5"/><rect x="4" y="4.5" width="4" height="7" rx="1.2" fill="#5E7F96"/><circle cx="23.5" cy="4.5" r="1" fill="#FFF59D"/><circle cx="23.5" cy="11.5" r="1" fill="#FFF59D"/></svg>
+        </div>
+        <svg class="flagIc" viewBox="0 0 18 22" aria-label="Finish"><defs><pattern id="chq" width="4" height="4" patternUnits="userSpaceOnUse"><rect width="4" height="4" fill="#fff"/><rect width="2" height="2" fill="#111"/><rect x="2" y="2" width="2" height="2" fill="#111"/></pattern></defs><line x1="3" y1="2" x2="3" y2="21" stroke="#fff" stroke-width="2" stroke-linecap="round"/><path d="M4 2.5h12.5v8.5H4Z" fill="url(#chq)" stroke="#fff" stroke-width=".8"/></svg>
+      </div>
     </div>
-    <div id="status"><span class="dot" id="dot"></span><span id="statusText">Connecting…</span></div>
+    <!-- 3. what they're doing: Driving / Not moving / On the bus / Walking, and what they're listening to -->
+    <div class="box" id="doingBox">
+      <div id="doing">
+        <div id="actIcon"></div>
+        <div style="flex:1;min-width:0"><div id="actText">Loading…</div><div id="actSub"><span id="who"></span> <span id="moodTag"></span></div></div>
+      </div>
+      <div id="song"><span class="tag"></span><span class="st"></span><span class="txt"></span><span class="time"></span></div>
+      <div id="songBar"><div></div></div>
+    </div>
   </div>
 
   <button id="follow" class="on" title="Follow">◎</button>
@@ -190,6 +215,20 @@
   }
   function sq(a, b) { const k = Math.cos(a[0] * Math.PI / 180); return (a[0] - b[0]) ** 2 + ((a[1] - b[1]) * k) ** 2; }
 
+  // Icons for what they're doing
+  const ICONS = {
+    driving: '<svg viewBox="0 0 28 28" fill="none" stroke="#3B9EFF" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 18v-4l3-1 3-5h10l3 5 3 1v4"/><path d="M3 18h3m5 0h6m5 0h3"/><circle cx="8.5" cy="18.5" r="2.5"/><circle cx="19.5" cy="18.5" r="2.5"/></svg>',
+    stopped: '<svg viewBox="0 0 28 28" fill="none" stroke="#9AA4B2" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 18v-4l3-1 3-5h10l3 5 3 1v4"/><path d="M3 18h3m5 0h6m5 0h3"/><circle cx="8.5" cy="18.5" r="2.5"/><circle cx="19.5" cy="18.5" r="2.5"/></svg>',
+    bus: '<svg viewBox="0 0 28 28" fill="none" stroke="#00C2BB" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="3" width="16" height="19" rx="3"/><path d="M6 13h16M10 6h8"/><circle cx="10" cy="17.5" r="1" fill="#00C2BB"/><circle cx="18" cy="17.5" r="1" fill="#00C2BB"/><path d="M9 22v3M19 22v3"/></svg>',
+    walking: '<svg viewBox="0 0 28 28" fill="none" stroke="#4CAF50" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="15.5" cy="4.5" r="2.2"/><path d="M14.5 8l-1.6 7.5-3.9 8M12.9 15.5l3.6 3.6.5 5M14 9.5l-4.5 3.4M14 9.5l5 3.4"/><path d="M3 26.5h22" stroke-dasharray="2 3"/></svg>'
+  };
+  // Driving / Not moving / On the bus / Walking. Older app versions don't send it: work it out from the speed.
+  function activityOf(t) {
+    if (t.activity) return t.activity;
+    return t.speed != null && t.speed > 1.5 ? 'driving' : 'stopped';
+  }
+  const ACT_TEXT = { driving: 'Driving', stopped: 'Not moving', bus: 'On the bus', walking: 'Walking' };
+
   function showMsg(icon, title, text) { $('msgIcon').textContent = icon; $('msgTitle').textContent = title; $('msgText').textContent = text; $('msg').classList.add('show'); }
 
   function faceHtml(t) {
@@ -212,7 +251,7 @@
     if (!me) {
       const el = document.createElement('div'); el.style.zIndex = 5;
       el.innerHTML = '<div class="me"><div class="np"><span class="tag"></span><span class="st"></span><span class="txt"></span><span class="time"></span></div>' +
-        '<div class="arrow"></div><div class="face"></div></div>';
+        '<div class="arrow"></div><div class="face"></div><div class="busSign"></div></div>';
       me = new mapboxgl.Marker({ element: el }).setLngLat(ll).addTo(map);
       photoV = -1;
     }
@@ -226,13 +265,19 @@
       if (t.heading != null) arrow.style.transform = 'rotate(' + t.heading + 'deg)';
       arrow.style.opacity = moving ? 1 : .55;
       el.querySelector('.me').classList.toggle('old', Date.now() - t.updatedAt > 120000);
-      // what they're listening to, above the icon
-      const np = el.querySelector('.np'), m = t.music;
-      np.classList.toggle('show', !!m);
-      if (m) {
-        const tag = np.querySelector('.tag');
-        tag.textContent = m.player || 'Music';
-        tag.className = 'tag ' + (m.player || '').toLowerCase();
+      // on the bus: the bus number under the face
+      const sign = el.querySelector('.busSign'), bus = t.mode === 'bus' && t.bus;
+      sign.classList.toggle('show', !!bus);
+      if (bus) sign.textContent = bus.service;
+      // what they're listening to, above the icon (the radio takes Spotify's place, like in the app)
+      const np = el.querySelector('.np'), m = t.radio ? null : t.music;
+      np.classList.toggle('show', !!(m || t.radio));
+      if (t.radio) {
+        fillRadio(np, t.radio);
+        np.querySelector('.time').textContent = '';
+        fitPill(np);
+      } else if (m) {
+        musicTag(np, m);
         const st = np.querySelector('.st');
         st.textContent = m.playing ? '▶' : '❚❚'; st.className = 'st' + (m.playing ? '' : ' paused');
         np.querySelector('.txt').textContent = [m.artist, m.title].filter(Boolean).join(' – ');
@@ -241,6 +286,28 @@
       }
     }
   }
+  // Radio station: its logo (or a RADIO tag), play / pause, name and genre
+  function fillRadio(box, r) {
+    let tag = box.querySelector('.tag, img.logo');
+    if (r.hasLogo) {
+      if (!(tag instanceof HTMLImageElement)) { const img = document.createElement('img'); img.className = 'logo'; img.alt = ''; tag.replaceWith(img); tag = img; }
+      const src = '/api/share/' + id + '/radiologo?v=' + r.logoV;
+      if (tag.getAttribute('src') !== src) tag.src = src;
+    } else {
+      if (tag instanceof HTMLImageElement) { const sp = document.createElement('span'); tag.replaceWith(sp); tag = sp; }
+      tag.className = 'tag radio'; tag.textContent = 'RADIO';
+    }
+    const st = box.querySelector('.st');
+    st.textContent = r.playing ? '▶' : '❚❚'; st.className = 'st' + (r.playing ? '' : ' paused');
+    box.querySelector('.txt').textContent = r.name + (r.genre ? ' · ' + r.genre : '') + (r.playing ? ' · Live' : ' · Paused');
+  }
+  // Music app tag (Spotify / YouTube Music); swaps back from a radio logo if needed
+  function musicTag(box, m) {
+    let tag = box.querySelector('.tag, img.logo');
+    if (tag instanceof HTMLImageElement) { const sp = document.createElement('span'); tag.replaceWith(sp); tag = sp; }
+    tag.textContent = m.player || 'Music'; tag.className = 'tag ' + (m.player || '').toLowerCase();
+  }
+
   // Keep the song pill on screen: slide it sideways if the icon is near the edge of the map.
   function fitPill(np) {
     np.style.transform = 'translateX(-50%)';
@@ -292,10 +359,18 @@
   function render() {
     const t = data; if (!t) return;
     const moodName = MOODS[t.mood];
-    $('who').textContent = t.name + (t.endedAt ? '' : ' is ' + (t.dest ? 'driving' : 'sharing their location'));
+    $('who').textContent = t.name;
+    const act = activityOf(t);
+    $('actIcon').className = act; $('actIcon').innerHTML = ICONS[act];
+    let actText = ACT_TEXT[act];
+    if (act === 'bus' && t.bus) {
+      $('actText').innerHTML = '<span class="svc"></span><span></span>';
+      $('actText').firstChild.textContent = t.bus.service;
+      $('actText').lastChild.textContent = 'On the bus' + (t.bus.heading ? ' ' + t.bus.heading : '');
+    } else $('actText').textContent = actText;
     $('moodTag').textContent = t.mood ? t.mood + (moodName ? ' ' + moodName : '') : '';
     document.title = t.name + "'s live trip";
-    $('to').innerHTML = t.dest ? 'To <b></b>' : 'No destination set';
+    $('to').innerHTML = t.dest ? 'Heading to <b></b>' : '';
     if (t.dest) $('to').querySelector('b').textContent = t.dest.name;
     // where they are now: street, area and town
     const pl = !t.endedAt && t.place;
@@ -305,12 +380,14 @@
       const text = pl.road ? pl.road + (town ? ' · ' + town : '') : town;
       if (text) { $('where').innerHTML = '<span class="pin">📍</span> '; $('where').append(document.createTextNode(text)); }
     }
+    $('placeBox').classList.toggle('empty', !$('where').textContent && !t.dest);
     // what they're listening to
-    const m = !t.endedAt && t.music, song = $('song');
-    song.classList.toggle('show', !!m);
+    const radio = !t.endedAt && t.radio;
+    const m = !t.endedAt && !radio && t.music, song = $('song');
+    song.classList.toggle('show', !!(m || radio));
+    if (radio) { fillRadio(song, radio); song.querySelector('.time').textContent = ''; }
     if (m) {
-      const tag = song.querySelector('.tag');
-      tag.textContent = m.player || 'Music'; tag.className = 'tag ' + (m.player || '').toLowerCase();
+      musicTag(song, m);
       const st = song.querySelector('.st');
       st.textContent = m.playing ? '▶' : '❚❚'; st.className = 'st' + (m.playing ? '' : ' paused');
       song.querySelector('.txt').textContent = [m.artist, m.title].filter(Boolean).join(' – ');
@@ -341,7 +418,9 @@
     if (!t.endedAt && t.speed != null && age < 45000) s += ' · ' + Math.round(t.speed * 2.23694) + ' mph';
     $('statusText').textContent = s;
     if (t.endedAt) {
-      $('who').textContent = t.name + (t.arrived ? ' has arrived' : " isn't sharing right now");
+      $('actText').textContent = t.arrived ? 'Arrived' : 'Not sharing right now';
+      $('actIcon').className = ''; $('actIcon').innerHTML = t.arrived ? '🏁' : '🔒';
+      $('placeBox').classList.toggle('empty', !(t.arrived && t.lastDest));
       $('to').innerHTML = t.arrived && t.lastDest ? 'At <b></b>' : 'Their location is hidden until they share a trip again';
       if (t.arrived && t.lastDest) $('to').querySelector('b').textContent = t.lastDest;
       if (me) { me.remove(); me = null; }
@@ -353,7 +432,8 @@
       const r = await fetch('/api/share/' + id, { cache: 'no-store' });
       if (r.status === 404) {
         showMsg('🔗', 'Nothing shared yet', "Nobody is sharing a trip on this link right now. This page will update by itself when they do.");
-        $('who').textContent = 'Not sharing right now'; $('to').textContent = ''; $('stats').style.display = 'none';
+        $('actText').textContent = 'Not sharing right now'; $('to').textContent = ''; $('stats').style.display = 'none';
+        $('placeBox').classList.add('empty');
         $('progress').style.display = 'none'; $('statusText').textContent = 'Waiting for a trip on this link…'; $('dot').className = 'dot';
         return setTimeout(poll, 15000);
       }
