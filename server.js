@@ -196,6 +196,25 @@ async function itunesSearch(q) {
   return { source: 'itunes', artists: [], tracks: (j.results || []).map(t => ({ name: t.trackName, uri: '', artists: t.artistName,
     album: t.collectionName, image: (t.artworkUrl100 || '').replace('100x100', '120x120') || null, durationMs: t.trackTimeMillis || 0 })) };
 }
+// ---------- live buses for the map (bustimes.org, which serves the government's open bus data; cached briefly) ----------
+const busCache = new Map();
+async function liveBuses(s, w, n, e) {
+  const k = [s, w, n, e].map(v => v.toFixed(2)).join(',');
+  const hit = busCache.get(k);
+  if (hit && Date.now() - hit.at < 12000) return hit.list;
+  const r = await fetch(`https://bustimes.org/vehicles.json?ymin=${s}&xmin=${w}&ymax=${n}&xmax=${e}`,
+    { headers: { 'User-Agent': 'NaviGO-ShareTrip/1.0 (personal trip sharing)', Accept: 'application/json' } });
+  if (!r.ok) throw new Error('HTTP ' + r.status);
+  const j = await r.json();
+  const list = (Array.isArray(j) ? j : []).slice(0, 300).map(v => ({
+    line: (v.service && v.service.line_name) || v.line_name || '', dest: v.destination || '',
+    lng: v.coordinates && v.coordinates[0], lat: v.coordinates && v.coordinates[1], heading: v.heading == null ? null : +v.heading
+  })).filter(v => isFinite(v.lat) && isFinite(v.lng));
+  busCache.set(k, { at: Date.now(), list });
+  if (busCache.size > 500) busCache.delete(busCache.keys().next().value);
+  return list;
+}
+
 async function musicSearch(q) {
   try { return await spotifySearch(q); }
   catch (e) { console.log('Using backup song search:', e.message); return itunesSearch(q); }
@@ -235,6 +254,13 @@ const server = http.createServer(async (req, res) => {
   if (url.pathname === '/config.js') {
     res.writeHead(200, { 'Content-Type': MIME['.js'], 'Cache-Control': 'no-cache' });
     return res.end('window.MAPBOX_TOKEN = ' + JSON.stringify(MAPBOX_TOKEN) + ';');
+  }
+  if (url.pathname === '/api/buses') {
+    const p = k => +url.searchParams.get(k);
+    const sb = p('s'), wb = p('w'), nb = p('n'), eb = p('e');
+    if (![sb, wb, nb, eb].every(isFinite) || nb <= sb || eb <= wb || nb - sb > 0.4 || eb - wb > 0.6) return json(res, 400, { error: 'Bad area' });
+    try { return json(res, 200, await liveBuses(sb, wb, nb, eb)); }
+    catch (err) { return json(res, 503, { error: 'Live buses not available right now' }); }
   }
   const shareApi = url.pathname.match(/^\/api\/share\/(update|end)$/);
   if (shareApi && req.method === 'POST') return handleShareApi(req, res, shareApi[1]);

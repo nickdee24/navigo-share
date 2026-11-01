@@ -84,6 +84,18 @@
       width: 50px; height: 50px; border-radius: 50%; border: 1px solid var(--border); background: rgba(23,26,31,.94);
       color: var(--text); font-size: 22px; box-shadow: 0 6px 16px rgba(0,0,0,.45); cursor: pointer; }
     #follow.on { color: var(--accent); border-color: var(--accent); }
+    /* live buses on/off, above the follow button */
+    #busesBtn { position: fixed; right: 14px; bottom: calc(82px + env(safe-area-inset-bottom)); z-index: 1000;
+      width: 50px; height: 50px; border-radius: 50%; border: 1px solid var(--border); background: rgba(23,26,31,.94);
+      color: var(--muted); box-shadow: 0 6px 16px rgba(0,0,0,.45); cursor: pointer; display: flex; align-items: center; justify-content: center; padding: 0; }
+    #busesBtn.on { color: #00C2BB; border-color: #00C2BB; }
+    #busesBtn svg { width: 26px; height: 26px; }
+    #busesTip { position: fixed; right: 72px; bottom: calc(92px + env(safe-area-inset-bottom)); z-index: 1000; font-size: 12px; color: var(--text);
+      background: rgba(23,26,31,.94); border: 1px solid var(--border); border-radius: 10px; padding: 5px 9px; display: none; }
+    .lbus { position: relative; width: 16px; height: 36px; pointer-events: auto; cursor: pointer; }
+    .lbus svg { position: absolute; inset: 0; transition: transform .8s; filter: drop-shadow(0 1px 2px rgba(0,0,0,.6)); }
+    .lbus b { position: absolute; left: 50%; bottom: 34px; transform: translateX(-50%); font: 800 11px ui-monospace, Menlo, monospace; color: #FFB020;
+      background: #111; border-radius: 4px; padding: 0 3px; white-space: nowrap; }
     #brand { position: fixed; left: 14px; bottom: calc(26px + env(safe-area-inset-bottom)); z-index: 1000;
       font-size: 12px; color: var(--muted); background: rgba(23,26,31,.85); padding: 5px 10px; border-radius: 20px; }
     #brand b { color: var(--accent); }
@@ -188,6 +200,8 @@
     <div class="box" id="busPanel"></div>
   </div>
 
+  <button id="busesBtn" title="Live buses on the map" aria-label="Live buses on the map"><svg viewBox="0 0 28 28" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="3" width="16" height="19" rx="3"/><path d="M6 13h16M10 6h8"/><path d="M9 22v3M19 22v3"/></svg></button>
+  <div id="busesTip"></div>
   <button id="follow" class="on" title="Follow">◎</button>
   <div id="brand">Shared from <b>NaviGO</b></div>
 
@@ -528,6 +542,48 @@
     }
     setTimeout(poll, data && data.endedAt ? 10000 : 4000);
   }
+  // ---------- live buses on the map (toggle remembered on this device) ----------
+  let busesOn = true;
+  try { busesOn = localStorage.getItem('navigoBuses') !== 'off'; } catch (e) {}
+  let busMarks = [], busTimer = null;
+  const miniBus = '<svg viewBox="0 0 16 36"><rect x=".8" y=".8" width="14.4" height="34.4" rx="3.5" fill="#00A9A4" stroke="#fff" stroke-width="1.4"/><rect x="3" y="7" width="10" height="26" rx="2" fill="#F4F2EA"/><rect x="2.5" y="2.5" width="11" height="4" rx="1.5" fill="#20303A"/></svg>';
+  function tip(text) { const t = $('busesTip'); t.textContent = text; t.style.display = 'block'; clearTimeout(tip.h); tip.h = setTimeout(() => t.style.display = 'none', 2500); }
+  function clearBuses() { busMarks.forEach(m => m.remove()); busMarks = []; }
+  async function loadBuses() {
+    clearTimeout(busTimer);
+    if (!busesOn) { clearBuses(); return; }
+    busTimer = setTimeout(loadBuses, 15000);
+    if (!map.getBounds || map.getZoom() < 12) { clearBuses(); return; }
+    const b = map.getBounds();
+    const q = 's=' + b.getSouth().toFixed(4) + '&w=' + b.getWest().toFixed(4) + '&n=' + b.getNorth().toFixed(4) + '&e=' + b.getEast().toFixed(4);
+    try {
+      const r = await fetch('/api/buses?' + q, { cache: 'no-store' });
+      if (!r.ok) return;
+      const list = await r.json();
+      if (!busesOn) return;
+      clearBuses();
+      list.forEach(v => {
+        const el = document.createElement('div'); el.className = 'lbus';
+        el.innerHTML = miniBus + '<b></b>';
+        el.querySelector('b').textContent = v.line;
+        if (v.heading != null) el.querySelector('svg').style.transform = 'rotate(' + v.heading + 'deg)';
+        el.title = 'Bus ' + v.line + (v.dest ? ' to ' + v.dest : '');
+        el.addEventListener('click', e => { e.stopPropagation(); tip(el.title); });
+        busMarks.push(new mapboxgl.Marker({ element: el }).setLngLat([v.lng, v.lat]).addTo(map));
+      });
+    } catch (e) { /* try again next time */ }
+  }
+  $('busesBtn').classList.toggle('on', busesOn);
+  $('busesBtn').onclick = () => {
+    busesOn = !busesOn;
+    try { localStorage.setItem('navigoBuses', busesOn ? 'on' : 'off'); } catch (e) {}
+    $('busesBtn').classList.toggle('on', busesOn);
+    tip(busesOn ? 'Live buses on (zoom in to see them)' : 'Live buses off');
+    loadBuses();
+  };
+  map.on('moveend', () => { if (busesOn) { clearTimeout(loadBuses.d); loadBuses.d = setTimeout(loadBuses, 600); } });
+  setTimeout(loadBuses, 3000);
+
   setInterval(render, 1000);   // keep "updated x seconds ago" ticking
   if (!/^[A-Za-z0-9]{8,16}$/.test(id || '')) showMsg('🔗', 'Bad link', 'This trip link is not complete.');
   else poll();
