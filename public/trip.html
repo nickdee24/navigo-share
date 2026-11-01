@@ -16,27 +16,43 @@
     * { box-sizing: border-box; }
     html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
       font: 15px/1.35 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
-    #map { position: fixed; inset: 0; background: #2B2F36; }
+    #map { position: fixed; inset: 0; background: #272E3A; }
     .mapboxgl-ctrl-attrib { background: rgba(13,15,18,.7) !important; }
     .dark-tiles { filter: invert(1) hue-rotate(180deg) brightness(.85) contrast(.9) saturate(.4); }
 
     #card { position: fixed; left: 12px; right: 12px; top: calc(12px + env(safe-area-inset-top)); max-width: 480px; margin: 0 auto;
-      background: rgba(23,26,31,.94); border: 1px solid var(--border); border-radius: 14px; padding: 12px 14px;
-      box-shadow: 0 8px 24px rgba(0,0,0,.45); z-index: 1000; }
+      z-index: 1000; display: flex; flex-direction: column; gap: 8px; }
+    .box { background: rgba(23,26,31,.94); border: 1px solid var(--border); border-radius: 14px; padding: 10px 14px;
+      box-shadow: 0 8px 24px rgba(0,0,0,.45); }
+    #liveBox { display: flex; align-items: center; gap: 8px; font-size: 14px; color: var(--text); padding: 9px 14px; }
+    #placeBox:empty, #placeBox.empty { display: none; }
+    /* what they're doing: icon + Driving / Not moving / On the bus / Walking */
+    #doing { display: flex; align-items: center; gap: 12px; }
+    #actIcon { flex: none; width: 42px; height: 42px; border-radius: 12px; background: var(--alt); display: flex; align-items: center; justify-content: center; }
+    #actIcon svg { width: 28px; height: 28px; }
+    #actIcon.driving { background: rgba(59,158,255,.18); }
+    #actIcon.bus { background: rgba(0,169,164,.22); }
+    #actIcon.walking { background: rgba(76,175,80,.2); }
+    #actText { font-size: 17px; font-weight: 700; }
+    #actSub { font-size: 13px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .svc { display: inline-block; background: #111; color: #FFB020; border: 1px solid #444; border-radius: 6px; padding: 0 6px;
+      font-weight: 800; font-size: 14px; margin-right: 6px; font-variant-numeric: tabular-nums; }
     .row { display: flex; align-items: center; gap: 10px; }
-    #who { font-size: 17px; font-weight: 700; flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    #who { font-weight: 600; color: var(--text); }
     #moodTag { font-size: 13px; color: var(--muted); font-weight: 500; }
-    #to { color: var(--muted); font-size: 14px; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    #to { color: var(--muted); font-size: 14px; margin-top: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     #to b { color: var(--text); font-weight: 600; }
-    #where { color: var(--text); font-size: 14px; margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    #where { color: var(--text); font-size: 15px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     #where:empty { display: none; }
     #where .pin { color: var(--accent); }
     /* what they're listening to, in the card */
-    #song { display: none; align-items: flex-start; gap: 7px; margin-top: 6px; font-size: 13px; min-width: 0; }
+    #song { display: none; align-items: flex-start; gap: 7px; margin-top: 10px; font-size: 13px; min-width: 0; }
     #song.show { display: flex; }
     #song .tag { flex: none; font-size: 10px; font-weight: 800; padding: 1px 6px; border-radius: 4px; background: var(--alt); }
     #song .tag.spotify { background: #1DB954; color: #000; }
     #song .tag.youtube { background: #FF0033; color: #fff; }
+    #song .tag.radio, .np .tag.radio { background: #E9EDF3; color: #111; }
+    #song img.logo, .np img.logo { flex: none; width: 22px; height: 22px; border-radius: 5px; background: #fff; object-fit: contain; }
     #song .st { flex: none; font-size: 11px; color: var(--green); }
     #song .st.paused { color: var(--muted); }
     #song .txt { white-space: normal; overflow-wrap: anywhere; min-width: 0; line-height: 1.3; }
@@ -51,7 +67,6 @@
     .stat { background: var(--alt); border-radius: 10px; padding: 7px 10px; }
     .stat .v { font-size: 18px; font-weight: 700; }
     .stat .l { font-size: 12px; color: var(--muted); }
-    #status { display: flex; align-items: center; gap: 7px; margin-top: 10px; font-size: 13px; color: var(--muted); }
     .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--muted); flex: none; }
     .dot.live { background: var(--green); box-shadow: 0 0 8px var(--green); animation: pulse 2s infinite; }
     .dot.stale { background: var(--warn); }
@@ -69,6 +84,18 @@
       width: 50px; height: 50px; border-radius: 50%; border: 1px solid var(--border); background: rgba(23,26,31,.94);
       color: var(--text); font-size: 22px; box-shadow: 0 6px 16px rgba(0,0,0,.45); cursor: pointer; }
     #follow.on { color: var(--accent); border-color: var(--accent); }
+    /* live buses on/off, above the follow button */
+    #busesBtn { position: fixed; right: 14px; bottom: calc(82px + env(safe-area-inset-bottom)); z-index: 1000;
+      width: 50px; height: 50px; border-radius: 50%; border: 1px solid var(--border); background: rgba(23,26,31,.94);
+      color: var(--muted); box-shadow: 0 6px 16px rgba(0,0,0,.45); cursor: pointer; display: flex; align-items: center; justify-content: center; padding: 0; }
+    #busesBtn.on { color: #00C2BB; border-color: #00C2BB; }
+    #busesBtn svg { width: 26px; height: 26px; }
+    #busesTip { position: fixed; right: 72px; bottom: calc(92px + env(safe-area-inset-bottom)); z-index: 1000; font-size: 12px; color: var(--text);
+      background: rgba(23,26,31,.94); border: 1px solid var(--border); border-radius: 10px; padding: 5px 9px; display: none; }
+    .lbus { position: relative; width: 16px; height: 36px; pointer-events: auto; cursor: pointer; }
+    .lbus svg { position: absolute; inset: 0; transition: transform .8s; filter: drop-shadow(0 1px 2px rgba(0,0,0,.6)); }
+    .lbus b { position: absolute; left: 50%; bottom: 34px; transform: translateX(-50%); font: 800 11px ui-monospace, Menlo, monospace; color: #FFB020;
+      background: #111; border-radius: 4px; padding: 0 3px; white-space: nowrap; }
     #brand { position: fixed; left: 14px; bottom: calc(26px + env(safe-area-inset-bottom)); z-index: 1000;
       font-size: 12px; color: var(--muted); background: rgba(23,26,31,.85); padding: 5px 10px; border-radius: 20px; }
     #brand b { color: var(--accent); }
@@ -101,6 +128,39 @@
     .np .st { flex: none; font-size: 10px; color: var(--green); }
     .np .st.paused { color: var(--muted); }
     .np .txt { white-space: normal; overflow-wrap: anywhere; line-height: 1.3; }
+    .me .busSign { position: absolute; left: 50%; top: 54px; transform: translateX(-50%); display: none; background: #111; color: #FFB020;
+      border: 2px solid #fff; border-radius: 7px; padding: 0 7px; font-weight: 800; font-size: 14px; white-space: nowrap; box-shadow: 0 2px 6px rgba(0,0,0,.6); }
+    .me .busSign.show { display: block; cursor: pointer; pointer-events: auto; }
+    .me .busIcon { display: none; position: absolute; left: 50%; top: 50%; width: 30px; height: 72px; margin: -36px 0 0 -15px;
+      transition: transform .8s; filter: drop-shadow(0 2px 3px rgba(0,0,0,.6)); cursor: pointer; }
+    .me.onbus .busIcon { display: block; }
+    .me.onbus .arrow { display: none !important; }
+    .me.onbus .face { inset: auto; left: 8px; top: -112px; width: 40px; height: 40px; font-size: 22px; border-width: 2px; }
+    .me.onbus .busSign { top: -68px; }
+    .me.onbus .np { bottom: 126px; }
+    .me .busSign .l1 { font-family: ui-monospace, "Cascadia Mono", Menlo, monospace; font-size: 15px; }
+    .me .busSign .l2 { font-family: ui-monospace, "Cascadia Mono", Menlo, monospace; font-size: 11px; text-align: center; }
+    .ontime { color: #3DDC84; } .lateTime { color: #FFB020; } .lateBy { color: #FF4D4D; }
+    .me .face { cursor: pointer; }
+    /* tap the bus: its journey, train-style */
+    #busPanel { display: none; max-height: 52vh; overflow: auto; }
+    #busPanel.show { display: block; }
+    #busPanel .hd { display: flex; align-items: center; gap: 10px; }
+    #busPanel .hd .svc { font-size: 18px; padding: 2px 8px; }
+    #busPanel .dest { font-weight: 700; font-size: 16px; flex: 1; }
+    #busPanel .x { background: none; border: 0; color: var(--muted); font-size: 20px; cursor: pointer; }
+    #busPanel .sub { color: var(--muted); font-size: 13px; margin-top: 4px; }
+    #busPanel .arr { font-weight: 700; margin-top: 4px; }
+    #busPanel h4 { margin: 10px 0 4px; font-size: 12px; color: var(--muted); }
+    #busPanel ol { list-style: none; margin: 0; padding: 0; }
+    #busPanel li { position: relative; display: flex; justify-content: space-between; gap: 8px; padding: 6px 0 6px 26px; font-size: 14px; }
+    #busPanel li::before { content: ""; position: absolute; left: 8px; top: 0; bottom: 0; width: 3px; background: #FFB020; }
+    #busPanel li:first-child::before { top: 50%; } #busPanel li:last-child::before { bottom: 50%; }
+    #busPanel li::after { content: ""; position: absolute; left: 3px; top: 50%; width: 9px; height: 9px; margin-top: -6.5px; border-radius: 50%;
+      background: #fff; border: 2px solid #FFB020; }
+    #busPanel li:first-child, #busPanel li:last-child { font-weight: 700; }
+    #busPanel li:first-child::after, #busPanel li:last-child::after { background: #FFB020; }
+    #busPanel li .tm { flex: none; font-variant-numeric: tabular-nums; }
     .flag { font-size: 30px; line-height: 1; filter: drop-shadow(0 2px 3px rgba(0,0,0,.6)); }
   </style>
 </head>
@@ -108,29 +168,40 @@
   <div id="map"></div>
 
   <div id="card">
-    <div class="row">
-      <div id="who">Loading trip…</div>
-      <span id="moodTag"></span>
-    </div>
-    <div id="to"></div>
-    <div id="where"></div>
-    <div id="song"><span class="tag"></span><span class="st"></span><span class="txt"></span><span class="time"></span></div>
-    <div id="songBar"><div></div></div>
-    <div class="stats" id="stats">
-      <div class="stat"><div class="v" id="arrive">--:--</div><div class="l">Arrival</div></div>
-      <div class="stat"><div class="v" id="left">--</div><div class="l">Time left</div></div>
-      <div class="stat"><div class="v" id="dist">--</div><div class="l">Distance</div></div>
-    </div>
-    <div id="progress">
-      <svg class="flagIc" viewBox="0 0 18 22" aria-label="Start"><line x1="3" y1="2" x2="3" y2="21" stroke="#fff" stroke-width="2" stroke-linecap="round"/><path d="M4 2.5c4-1.6 8 1.6 12 .3v8.4c-4 1.4-8-1.8-12-.2Z" fill="#3B9EFF"/></svg>
-      <div class="track"><div class="fill"></div>
-        <svg class="car" viewBox="0 0 26 16" aria-label="Car"><rect x="1" y="2" width="24" height="12" rx="4" fill="#3B9EFF" stroke="#fff" stroke-width="1.5"/><rect x="14" y="4" width="5" height="8" rx="1.5" fill="#9FD3F5"/><rect x="4" y="4.5" width="4" height="7" rx="1.2" fill="#5E7F96"/><circle cx="23.5" cy="4.5" r="1" fill="#FFF59D"/><circle cx="23.5" cy="11.5" r="1" fill="#FFF59D"/></svg>
+    <!-- 1. live: when the location last came in, and the speed -->
+    <div class="box" id="liveBox"><span class="dot" id="dot"></span><span id="statusText">Connecting…</span></div>
+    <!-- 2. where they are now (and where they're going) -->
+    <div class="box" id="placeBox">
+      <div id="where"></div>
+      <div id="to"></div>
+      <div class="stats" id="stats">
+        <div class="stat"><div class="v" id="arrive">--:--</div><div class="l">Arrival</div></div>
+        <div class="stat"><div class="v" id="left">--</div><div class="l">Time left</div></div>
+        <div class="stat"><div class="v" id="dist">--</div><div class="l">Distance</div></div>
       </div>
-      <svg class="flagIc" viewBox="0 0 18 22" aria-label="Finish"><defs><pattern id="chq" width="4" height="4" patternUnits="userSpaceOnUse"><rect width="4" height="4" fill="#fff"/><rect width="2" height="2" fill="#111"/><rect x="2" y="2" width="2" height="2" fill="#111"/></pattern></defs><line x1="3" y1="2" x2="3" y2="21" stroke="#fff" stroke-width="2" stroke-linecap="round"/><path d="M4 2.5h12.5v8.5H4Z" fill="url(#chq)" stroke="#fff" stroke-width=".8"/></svg>
+      <div id="progress">
+        <svg class="flagIc" viewBox="0 0 18 22" aria-label="Start"><line x1="3" y1="2" x2="3" y2="21" stroke="#fff" stroke-width="2" stroke-linecap="round"/><path d="M4 2.5c4-1.6 8 1.6 12 .3v8.4c-4 1.4-8-1.8-12-.2Z" fill="#3B9EFF"/></svg>
+        <div class="track"><div class="fill"></div>
+          <svg class="car" viewBox="0 0 26 16" aria-label="Car"><rect x="1" y="2" width="24" height="12" rx="4" fill="#3B9EFF" stroke="#fff" stroke-width="1.5"/><rect x="14" y="4" width="5" height="8" rx="1.5" fill="#9FD3F5"/><rect x="4" y="4.5" width="4" height="7" rx="1.2" fill="#5E7F96"/><circle cx="23.5" cy="4.5" r="1" fill="#FFF59D"/><circle cx="23.5" cy="11.5" r="1" fill="#FFF59D"/></svg>
+        </div>
+        <svg class="flagIc" viewBox="0 0 18 22" aria-label="Finish"><defs><pattern id="chq" width="4" height="4" patternUnits="userSpaceOnUse"><rect width="4" height="4" fill="#fff"/><rect width="2" height="2" fill="#111"/><rect x="2" y="2" width="2" height="2" fill="#111"/></pattern></defs><line x1="3" y1="2" x2="3" y2="21" stroke="#fff" stroke-width="2" stroke-linecap="round"/><path d="M4 2.5h12.5v8.5H4Z" fill="url(#chq)" stroke="#fff" stroke-width=".8"/></svg>
+      </div>
     </div>
-    <div id="status"><span class="dot" id="dot"></span><span id="statusText">Connecting…</span></div>
+    <!-- 3. what they're doing: Driving / Not moving / On the bus / Walking, and what they're listening to -->
+    <div class="box" id="doingBox">
+      <div id="doing">
+        <div id="actIcon"></div>
+        <div style="flex:1;min-width:0"><div id="actText">Loading…</div><div id="actSub"><span id="who"></span> <span id="moodTag"></span></div></div>
+      </div>
+      <div id="song"><span class="tag"></span><span class="st"></span><span class="txt"></span><span class="time"></span></div>
+      <div id="songBar"><div></div></div>
+    </div>
+    <!-- 4. tap the bus: its stops drop down here -->
+    <div class="box" id="busPanel"></div>
   </div>
 
+  <button id="busesBtn" title="Live buses on the map" aria-label="Live buses on the map"><svg viewBox="0 0 28 28" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="3" width="16" height="19" rx="3"/><path d="M6 13h16M10 6h8"/><path d="M9 22v3M19 22v3"/></svg></button>
+  <div id="busesTip"></div>
   <button id="follow" class="on" title="Follow">◎</button>
   <div id="brand">Shared from <b>NaviGO</b></div>
 
@@ -190,6 +261,20 @@
   }
   function sq(a, b) { const k = Math.cos(a[0] * Math.PI / 180); return (a[0] - b[0]) ** 2 + ((a[1] - b[1]) * k) ** 2; }
 
+  // Icons for what they're doing
+  const ICONS = {
+    driving: '<svg viewBox="0 0 28 28" fill="none" stroke="#3B9EFF" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 18v-4l3-1 3-5h10l3 5 3 1v4"/><path d="M3 18h3m5 0h6m5 0h3"/><circle cx="8.5" cy="18.5" r="2.5"/><circle cx="19.5" cy="18.5" r="2.5"/></svg>',
+    stopped: '<svg viewBox="0 0 28 28" fill="none" stroke="#9AA4B2" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 18v-4l3-1 3-5h10l3 5 3 1v4"/><path d="M3 18h3m5 0h6m5 0h3"/><circle cx="8.5" cy="18.5" r="2.5"/><circle cx="19.5" cy="18.5" r="2.5"/></svg>',
+    bus: '<svg viewBox="0 0 28 28" fill="none" stroke="#00C2BB" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="3" width="16" height="19" rx="3"/><path d="M6 13h16M10 6h8"/><circle cx="10" cy="17.5" r="1" fill="#00C2BB"/><circle cx="18" cy="17.5" r="1" fill="#00C2BB"/><path d="M9 22v3M19 22v3"/></svg>',
+    walking: '<svg viewBox="0 0 28 28" fill="none" stroke="#4CAF50" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="15.5" cy="4.5" r="2.2"/><path d="M14.5 8l-1.6 7.5-3.9 8M12.9 15.5l3.6 3.6.5 5M14 9.5l-4.5 3.4M14 9.5l5 3.4"/><path d="M3 26.5h22" stroke-dasharray="2 3"/></svg>'
+  };
+  // Driving / Not moving / On the bus / Walking. Older app versions don't send it: work it out from the speed.
+  function activityOf(t) {
+    if (t.activity) return t.activity;
+    return t.speed != null && t.speed > 1.5 ? 'driving' : 'stopped';
+  }
+  const ACT_TEXT = { driving: 'Driving', stopped: 'Not moving', bus: 'On the bus', walking: 'Walking' };
+
   function showMsg(icon, title, text) { $('msgIcon').textContent = icon; $('msgTitle').textContent = title; $('msgText').textContent = text; $('msg').classList.add('show'); }
 
   function faceHtml(t) {
@@ -212,8 +297,14 @@
     if (!me) {
       const el = document.createElement('div'); el.style.zIndex = 5;
       el.innerHTML = '<div class="me"><div class="np"><span class="tag"></span><span class="st"></span><span class="txt"></span><span class="time"></span></div>' +
-        '<div class="arrow"></div><div class="face"></div></div>';
+        '<div class="arrow"></div><div class="face"></div><div class="busSign"></div>' +
+        '<svg class="busIcon" viewBox="0 0 30 72"><rect x="1" y="1" width="28" height="70" rx="6" fill="#00A9A4" stroke="#fff" stroke-width="2"/>' +
+        '<rect x="5" y="13" width="20" height="53" rx="3" fill="#F4F2EA"/><path d="M5 45 25 36v5L5 50Z" fill="#00A9A4"/>' +
+        '<rect x="4" y="4" width="22" height="8" rx="3" fill="#20303A"/><rect x="10" y="22" width="10" height="4" rx="2" fill="#C9D3D8"/>' +
+        '<rect x="10" y="56" width="10" height="4" rx="2" fill="#C9D3D8"/></svg></div>';
       me = new mapboxgl.Marker({ element: el }).setLngLat(ll).addTo(map);
+      // on the bus: tap the icon or its sign for the bus's stops
+      el.addEventListener('click', e => { if (data && data.mode === 'bus' && data.bus) { e.stopPropagation(); busOpen = !busOpen; fillBusPanel(data); } });
       photoV = -1;
     }
     if (photoV !== t.photoV) { photoV = t.photoV; me.getElement().querySelector('.face').innerHTML = faceHtml(t); }
@@ -226,13 +317,30 @@
       if (t.heading != null) arrow.style.transform = 'rotate(' + t.heading + 'deg)';
       arrow.style.opacity = moving ? 1 : .55;
       el.querySelector('.me').classList.toggle('old', Date.now() - t.updatedAt > 120000);
-      // what they're listening to, above the icon
-      const np = el.querySelector('.np'), m = t.music;
-      np.classList.toggle('show', !!m);
-      if (m) {
-        const tag = np.querySelector('.tag');
-        tag.textContent = m.player || 'Music';
-        tag.className = 'tag ' + (m.player || '').toLowerCase();
+      // on the bus: the bus number under the face
+      const sign = el.querySelector('.busSign'), bus = t.mode === 'bus' && t.bus;
+      el.querySelector('.me').classList.toggle('onbus', t.mode === 'bus');
+      if (t.heading != null) el.querySelector('.busIcon').style.transform = 'rotate(' + t.heading + 'deg)';
+      sign.classList.toggle('show', !!bus);
+      if (bus) {
+        // like the app: number, arrival time (green on time / orange + red minutes late), stops left
+        const late = (bus.delayMin || 0) >= 2;
+        let h = '<div class="l1"></div>';
+        if (bus.eta) h = '<div class="l1"><span class="n"></span> <span class="' + (late ? 'lateTime' : 'ontime') + '">' + clock(bus.eta) + '</span>' +
+          (late ? ' <span class="lateBy">+' + bus.delayMin + '</span>' : '') + '</div>';
+        if (bus.stopsLeft != null) h += '<div class="l2">' + bus.stopsLeft + (bus.stopsLeft === 1 ? ' stop left' : ' stops left') + '</div>';
+        if (sign.dataset.h !== h + bus.service) { sign.innerHTML = h; sign.dataset.h = h + bus.service; (sign.querySelector('.n') || sign.querySelector('.l1')).textContent = bus.service; }
+      }
+      if (busOpen) fillBusPanel(t);
+      // what they're listening to, above the icon (the radio takes Spotify's place, like in the app)
+      const np = el.querySelector('.np'), m = t.radio ? null : t.music;
+      np.classList.toggle('show', !!(m || t.radio));
+      if (t.radio) {
+        fillRadio(np, t.radio);
+        np.querySelector('.time').textContent = '';
+        fitPill(np);
+      } else if (m) {
+        musicTag(np, m);
         const st = np.querySelector('.st');
         st.textContent = m.playing ? '▶' : '❚❚'; st.className = 'st' + (m.playing ? '' : ' paused');
         np.querySelector('.txt').textContent = [m.artist, m.title].filter(Boolean).join(' – ');
@@ -241,6 +349,51 @@
       }
     }
   }
+  // The bus's journey: where it's going, street, arrival (late or on time), stops left and a train-style list
+  let busOpen = false;
+  function fillBusPanel(t) {
+    const p = $('busPanel'), b = t && t.mode === 'bus' && !t.endedAt && t.bus;
+    p.classList.toggle('show', !!(busOpen && b));
+    if (!busOpen || !b) return;
+    const late = (b.delayMin || 0) >= 2;
+    const esc = x => String(x == null ? '' : x).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+    let h = '<div class="hd"><span class="svc">' + esc(b.service) + '</span><span class="dest">' + esc(b.destination ? 'to ' + b.destination : b.heading || 'Bus ' + b.service) +
+      '</span><button class="x" aria-label="Close">✕</button></div>';
+    if (b.street) h += '<div class="sub">Now on ' + esc(b.street) + '</div>';
+    if (b.eta) h += '<div class="arr"><span class="' + (late ? 'lateTime' : 'ontime') + '">Arrives ' + clock(b.eta) + '</span>' +
+      (late ? ' <span class="lateBy">+' + b.delayMin + ' min</span>' : ' <span class="ontime" style="font-weight:400;font-size:13px">On time</span>') + '</div>';
+    if (b.stopsLeft != null) h += '<div class="sub">' + b.stopsLeft + (b.stopsLeft === 1 ? ' stop left' : ' stops left') + '</div>';
+    if (b.stops && b.stops.length) {
+      h += '<h4>Stopping at</h4><ol>' + b.stops.map(x => '<li><span>' + esc(x.name) + '</span><span class="tm ' + (late ? 'lateTime' : 'ontime') + '">' +
+        (x.t ? clock(x.t) : '') + '</span></li>').join('') + '</ol>';
+    } else h += '<div class="sub">The bus\'s stops aren\'t available right now.</div>';
+    p.innerHTML = h;
+    p.querySelector('.x').onclick = () => { busOpen = false; p.classList.remove('show'); };
+  }
+  map.on('click', () => { if (busOpen) { busOpen = false; $('busPanel').classList.remove('show'); } });
+
+  // Radio station: its logo (or a RADIO tag), play / pause, name and genre
+  function fillRadio(box, r) {
+    let tag = box.querySelector('.tag, img.logo');
+    if (r.hasLogo) {
+      if (!(tag instanceof HTMLImageElement)) { const img = document.createElement('img'); img.className = 'logo'; img.alt = ''; tag.replaceWith(img); tag = img; }
+      const src = '/api/share/' + id + '/radiologo?v=' + r.logoV;
+      if (tag.getAttribute('src') !== src) tag.src = src;
+    } else {
+      if (tag instanceof HTMLImageElement) { const sp = document.createElement('span'); tag.replaceWith(sp); tag = sp; }
+      tag.className = 'tag radio'; tag.textContent = 'RADIO';
+    }
+    const st = box.querySelector('.st');
+    st.textContent = r.playing ? '▶' : '❚❚'; st.className = 'st' + (r.playing ? '' : ' paused');
+    box.querySelector('.txt').textContent = r.name + (r.genre ? ' · ' + r.genre : '') + (r.playing ? ' · Live' : ' · Paused');
+  }
+  // Music app tag (Spotify / YouTube Music); swaps back from a radio logo if needed
+  function musicTag(box, m) {
+    let tag = box.querySelector('.tag, img.logo');
+    if (tag instanceof HTMLImageElement) { const sp = document.createElement('span'); tag.replaceWith(sp); tag = sp; }
+    tag.textContent = m.player || 'Music'; tag.className = 'tag ' + (m.player || '').toLowerCase();
+  }
+
   // Keep the song pill on screen: slide it sideways if the icon is near the edge of the map.
   function fitPill(np) {
     np.style.transform = 'translateX(-50%)';
@@ -292,10 +445,18 @@
   function render() {
     const t = data; if (!t) return;
     const moodName = MOODS[t.mood];
-    $('who').textContent = t.name + (t.endedAt ? '' : ' is ' + (t.dest ? 'driving' : 'sharing their location'));
+    $('who').textContent = t.name;
+    const act = activityOf(t);
+    $('actIcon').className = act; $('actIcon').innerHTML = ICONS[act];
+    let actText = ACT_TEXT[act];
+    if (act === 'bus' && t.bus) {
+      $('actText').innerHTML = '<span class="svc"></span><span></span>';
+      $('actText').firstChild.textContent = t.bus.service;
+      $('actText').lastChild.textContent = 'On the bus' + (t.bus.heading ? ' ' + t.bus.heading : '');
+    } else $('actText').textContent = actText;
     $('moodTag').textContent = t.mood ? t.mood + (moodName ? ' ' + moodName : '') : '';
     document.title = t.name + "'s live trip";
-    $('to').innerHTML = t.dest ? 'To <b></b>' : 'No destination set';
+    $('to').innerHTML = t.dest ? 'Heading to <b></b>' : '';
     if (t.dest) $('to').querySelector('b').textContent = t.dest.name;
     // where they are now: street, area and town
     const pl = !t.endedAt && t.place;
@@ -305,12 +466,14 @@
       const text = pl.road ? pl.road + (town ? ' · ' + town : '') : town;
       if (text) { $('where').innerHTML = '<span class="pin">📍</span> '; $('where').append(document.createTextNode(text)); }
     }
+    $('placeBox').classList.toggle('empty', !$('where').textContent && !t.dest);
     // what they're listening to
-    const m = !t.endedAt && t.music, song = $('song');
-    song.classList.toggle('show', !!m);
+    const radio = !t.endedAt && t.radio;
+    const m = !t.endedAt && !radio && t.music, song = $('song');
+    song.classList.toggle('show', !!(m || radio));
+    if (radio) { fillRadio(song, radio); song.querySelector('.time').textContent = ''; }
     if (m) {
-      const tag = song.querySelector('.tag');
-      tag.textContent = m.player || 'Music'; tag.className = 'tag ' + (m.player || '').toLowerCase();
+      musicTag(song, m);
       const st = song.querySelector('.st');
       st.textContent = m.playing ? '▶' : '❚❚'; st.className = 'st' + (m.playing ? '' : ' paused');
       song.querySelector('.txt').textContent = [m.artist, m.title].filter(Boolean).join(' – ');
@@ -341,7 +504,9 @@
     if (!t.endedAt && t.speed != null && age < 45000) s += ' · ' + Math.round(t.speed * 2.23694) + ' mph';
     $('statusText').textContent = s;
     if (t.endedAt) {
-      $('who').textContent = t.name + (t.arrived ? ' has arrived' : " isn't sharing right now");
+      $('actText').textContent = t.arrived ? 'Arrived' : 'Not sharing right now';
+      $('actIcon').className = ''; $('actIcon').innerHTML = t.arrived ? '🏁' : '🔒';
+      $('placeBox').classList.toggle('empty', !(t.arrived && t.lastDest));
       $('to').innerHTML = t.arrived && t.lastDest ? 'At <b></b>' : 'Their location is hidden until they share a trip again';
       if (t.arrived && t.lastDest) $('to').querySelector('b').textContent = t.lastDest;
       if (me) { me.remove(); me = null; }
@@ -353,7 +518,8 @@
       const r = await fetch('/api/share/' + id, { cache: 'no-store' });
       if (r.status === 404) {
         showMsg('🔗', 'Nothing shared yet', "Nobody is sharing a trip on this link right now. This page will update by itself when they do.");
-        $('who').textContent = 'Not sharing right now'; $('to').textContent = ''; $('stats').style.display = 'none';
+        $('actText').textContent = 'Not sharing right now'; $('to').textContent = ''; $('stats').style.display = 'none';
+        $('placeBox').classList.add('empty');
         $('progress').style.display = 'none'; $('statusText').textContent = 'Waiting for a trip on this link…'; $('dot').className = 'dot';
         return setTimeout(poll, 15000);
       }
@@ -363,6 +529,7 @@
       const skew = Date.now() - data.now;
       ['updatedAt', 'endedAt', 'startedAt', 'eta'].forEach(k => { if (data[k]) data[k] += skew; });
       if (data.music && data.music.at) data.music.at += skew;
+      if (data.bus) { if (data.bus.eta) data.bus.eta += skew; (data.bus.stops || []).forEach(x => { if (x.t) x.t += skew; }); }
       $('msg').classList.remove('show');
       if (!data.endedAt && wasEnded) first = true;   // a new trip on the same link: zoom to it again
       wasEnded = !!data.endedAt;
@@ -375,6 +542,48 @@
     }
     setTimeout(poll, data && data.endedAt ? 10000 : 4000);
   }
+  // ---------- live buses on the map (toggle remembered on this device) ----------
+  let busesOn = true;
+  try { busesOn = localStorage.getItem('navigoBuses') !== 'off'; } catch (e) {}
+  let busMarks = [], busTimer = null;
+  const miniBus = '<svg viewBox="0 0 16 36"><rect x=".8" y=".8" width="14.4" height="34.4" rx="3.5" fill="#00A9A4" stroke="#fff" stroke-width="1.4"/><rect x="3" y="7" width="10" height="26" rx="2" fill="#F4F2EA"/><rect x="2.5" y="2.5" width="11" height="4" rx="1.5" fill="#20303A"/></svg>';
+  function tip(text) { const t = $('busesTip'); t.textContent = text; t.style.display = 'block'; clearTimeout(tip.h); tip.h = setTimeout(() => t.style.display = 'none', 2500); }
+  function clearBuses() { busMarks.forEach(m => m.remove()); busMarks = []; }
+  async function loadBuses() {
+    clearTimeout(busTimer);
+    if (!busesOn) { clearBuses(); return; }
+    busTimer = setTimeout(loadBuses, 15000);
+    if (!map.getBounds || map.getZoom() < 12) { clearBuses(); return; }
+    const b = map.getBounds();
+    const q = 's=' + b.getSouth().toFixed(4) + '&w=' + b.getWest().toFixed(4) + '&n=' + b.getNorth().toFixed(4) + '&e=' + b.getEast().toFixed(4);
+    try {
+      const r = await fetch('/api/buses?' + q, { cache: 'no-store' });
+      if (!r.ok) return;
+      const list = await r.json();
+      if (!busesOn) return;
+      clearBuses();
+      list.forEach(v => {
+        const el = document.createElement('div'); el.className = 'lbus';
+        el.innerHTML = miniBus + '<b></b>';
+        el.querySelector('b').textContent = v.line;
+        if (v.heading != null) el.querySelector('svg').style.transform = 'rotate(' + v.heading + 'deg)';
+        el.title = 'Bus ' + v.line + (v.dest ? ' to ' + v.dest : '');
+        el.addEventListener('click', e => { e.stopPropagation(); tip(el.title); });
+        busMarks.push(new mapboxgl.Marker({ element: el }).setLngLat([v.lng, v.lat]).addTo(map));
+      });
+    } catch (e) { /* try again next time */ }
+  }
+  $('busesBtn').classList.toggle('on', busesOn);
+  $('busesBtn').onclick = () => {
+    busesOn = !busesOn;
+    try { localStorage.setItem('navigoBuses', busesOn ? 'on' : 'off'); } catch (e) {}
+    $('busesBtn').classList.toggle('on', busesOn);
+    tip(busesOn ? 'Live buses on (zoom in to see them)' : 'Live buses off');
+    loadBuses();
+  };
+  map.on('moveend', () => { if (busesOn) { clearTimeout(loadBuses.d); loadBuses.d = setTimeout(loadBuses, 600); } });
+  setTimeout(loadBuses, 3000);
+
   setInterval(render, 1000);   // keep "updated x seconds ago" ticking
   if (!/^[A-Za-z0-9]{8,16}$/.test(id || '')) showMsg('🔗', 'Bad link', 'This trip link is not complete.');
   else poll();

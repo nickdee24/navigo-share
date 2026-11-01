@@ -1,13 +1,17 @@
-// Truck Dash look for a Mapbox GL map (same colours as the NaviGO app): grey-blue land, navy water,
-// orange motorways (pale grey while a route is shown), grey roads, red-and-white striped railways,
-// and no buildings, footpaths, cycle paths, steps or tracks. Use: TDMap.apply(map, routeShown)
+// NaviGO's night map look for a Mapbox GL map (same colours as the app): navy-grey land, blue water,
+// green parks, orange motorways (pale grey while a route is shown), blue-grey roads, red-and-white striped railways,
+// building outlines, and no footpaths, cycle paths, steps or tracks. Use: TDMap.apply(map, routeShown)
 'use strict';
 window.TDMap = (function () {
   let map;
   // ---------- Truck Dash colours (same as the NaviGO app) ----------
-  const C = { LAND: '#2B2F36', URBAN: '#343A44', PARK: '#3D5238', WATER: '#16283F', RIVER: '#1E3350', MINOR: '#7D838C',
-    MAIN: '#CBD0D6', MOTORWAY: '#FF8A3D', MOTORWAY_ROUTE: '#E3E6EA', CASE: '#1C1F24', PATH: '#575E68', BORDER: '#575E68',
-    TOWN: '#FFFFFF', ROADLABEL: '#CBD0D6', MINORLABEL: '#9AA4B2', WATERLABEL: '#5A9EC4', HALO: '#0D0F12' };
+  // Night colours from NaviGO's map (TruckDashMap.kt): navy-grey land, blue-grey roads, dark green parks
+  const C = { LAND: '#272E3A', URBAN: '#272E3A', PARK: '#174A38', BUILDING: '#2D3E53', WATER: '#1C3550', RIVER: '#24456A', MINOR: '#3E5770',
+    MAIN: '#4A6886', MOTORWAY: '#FF8A3D', MOTORWAY_ROUTE: '#E3E6EA', CASE: '#34495F', PATH: '#34475C', BORDER: '#575E68',
+    TOWN: '#FFFFFF', ROADLABEL: '#A9C3DE', MINORLABEL: '#8FA9C4', WATERLABEL: '#5A9EC4', HALO: '#272E3A' };
+  // parks, fields, woods, pitches etc. green; everything else plain ground
+  const greenByClass = ['match', ['get', 'class'],
+    ['park', 'grass', 'pitch', 'cemetery', 'wood', 'scrub', 'agriculture', 'crop', 'golf_course', 'garden', 'playground'], C.PARK, C.LAND];
   const isRoad = id => /^(road|bridge|tunnel)-/.test(id) && !/label|shield|number|exit/.test(id);
   const isMotorway = id => /motorway|trunk/.test(id);
   const byClass = route => ['match', ['get', 'class'],
@@ -22,7 +26,8 @@ window.TDMap = (function () {
       const id = l.id;
       if (id.startsWith('nv-')) continue;
       if (id.endsWith('-bg') && id.startsWith('admin')) continue;
-      // buildings blend into the ground; footpaths, cycle paths, steps and tracks are hidden: just roads (railways stay, striped)
+      // building outlines shown (like the app); footpaths, cycle paths, steps and tracks are hidden (railways stay, striped)
+      if (l.type === 'fill' && id.includes('building')) { try { map.setLayoutProperty(id, 'visibility', 'visible'); } catch (e) {} paint(id, 'fill-color', C.BUILDING); continue; }
       if (id.includes('building') || /path|steps|pedestrian|track|cycleway|piste|ferry|aerialway|golf|transit/.test(id) || /rail/.test(id) && /label/.test(id)) {
         try { map.setLayoutProperty(id, 'visibility', 'none'); } catch (e) {} continue; }
       if (l.type === 'background') paint(id, 'background-color', C.LAND);
@@ -30,7 +35,8 @@ window.TDMap = (function () {
         if (id === 'land') paint(id, 'fill-color', C.LAND);
         else if (id.includes('water')) paint(id, 'fill-color', C.WATER);
         else if (id.includes('park')) paint(id, 'fill-color', C.PARK);
-        else if (/landuse|landcover|aeroway|structure|pitch/.test(id) || /^(road|bridge|tunnel)-/.test(id)) paint(id, 'fill-color', C.URBAN);
+        else if (/landuse|landcover/.test(id)) { paint(id, 'fill-color', greenByClass); paint(id, 'fill-opacity', 1); }
+        else if (/aeroway|structure|pitch/.test(id) || /^(road|bridge|tunnel)-/.test(id)) paint(id, 'fill-color', C.URBAN);
       } else if (l.type === 'line') {
         if (id.includes('water')) paint(id, 'line-color', C.RIVER);
         else if (id.startsWith('admin')) paint(id, 'line-color', C.BORDER);

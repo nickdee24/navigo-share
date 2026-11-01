@@ -61,7 +61,7 @@ function pruneShares() {
 function endShare(t, arrived) {
   t.endedAt = Date.now(); t.arrived = !!arrived;
   t.lastDest = t.dest ? t.dest.name : null;
-  t.music = null; t.place = null; t.placeAt = null;
+  t.music = null; t.place = null; t.placeAt = null; t.radio = null; t.bus = null; t.activity = null;
   t.lat = t.lng = t.heading = t.speed = t.eta = t.remainingM = null; t.dest = null; t.route = null;
   t.routeV = (t.routeV || 0) + 1;
 }
@@ -69,7 +69,9 @@ setInterval(pruneShares, 10 * 60000);
 const num = v => (v == null || v === '' || !isFinite(+v) ? null : +v);
 function publicShare(t) {
   return { name: t.name, mood: t.mood, hasPhoto: !!t.photo, photoV: t.photoV || 0, lat: t.lat, lng: t.lng, heading: t.heading,
-    speed: t.speed, place: t.place || null, music: t.music || null, dest: t.dest, eta: t.eta, remainingM: t.remainingM, route: t.route, routeV: t.routeV || 0, lastDest: t.lastDest || null,
+    speed: t.speed, place: t.place || null, music: t.music || null,
+    radio: t.radio ? Object.assign({ hasLogo: !!t.radioLogo, logoV: t.radioLogoV || 0 }, t.radio) : null,
+    mode: t.mode || 'car', activity: t.activity || null, bus: t.bus || null, dest: t.dest, eta: t.eta, remainingM: t.remainingM, route: t.route, routeV: t.routeV || 0, lastDest: t.lastDest || null,
     startedAt: t.startedAt, updatedAt: t.updatedAt, endedAt: t.endedAt || null, arrived: !!t.arrived, now: Date.now() };
 }
 async function handleShareApi(req, res, action) {
@@ -96,6 +98,28 @@ async function handleShareApi(req, res, action) {
       // song progress in ms when this update arrived; the page counts on from here
       pos: num(b.music.pos), dur: num(b.music.dur), at: Date.now() };
   } else if (b.music !== undefined) t.music = null;
+  // The radio station playing in NaviGO (its logo comes once per station, as a small PNG)
+  if (b.radio && b.radio.name) {
+    const name = String(b.radio.name).slice(0, 60);
+    if (!t.radio || t.radio.name !== name) { t.radioLogo = null; t.radioLogoV = (t.radioLogoV || 0) + 1; }
+    t.radio = { name, genre: String(b.radio.genre || '').slice(0, 40), playing: !!b.radio.playing };
+    if (typeof b.radio.logo === 'string' && b.radio.logo.length < 80000 && /^[A-Za-z0-9+/=]+$/.test(b.radio.logo)) {
+      t.radioLogo = b.radio.logo; t.radioLogoV = (t.radioLogoV || 0) + 1;
+    }
+  } else if (b.radio !== undefined) { t.radio = null; t.radioLogo = null; }
+  // Car / bus / walking: the mode picked in the app, and what you're doing now (driving, stopped, bus, walking)
+  if (b.mode !== undefined) t.mode = ['car', 'bus', 'walk'].includes(b.mode) ? b.mode : 'car';
+  if (b.activity !== undefined) t.activity = ['driving', 'stopped', 'bus', 'walking'].includes(b.activity) ? b.activity : null;
+  if (b.bus && b.bus.service) {
+    t.bus = { service: String(b.bus.service).slice(0, 8), heading: String(b.bus.heading || '').slice(0, 60) };
+    // the bus's journey (when known): where it's going, arrival time, minutes late, stops left and the stops to come
+    if (b.bus.destination !== undefined) {
+      Object.assign(t.bus, { destination: String(b.bus.destination || '').slice(0, 80), street: String(b.bus.street || '').slice(0, 80),
+        eta: num(b.bus.eta), delayMin: num(b.bus.delayMin) || 0, stopsLeft: num(b.bus.stopsLeft),
+        stops: Array.isArray(b.bus.stops) ? b.bus.stops.slice(0, 60).map(x => ({ name: String((x && x.name) || '').slice(0, 80), t: num(x && x.t) })) : [] });
+    }
+  }
+  else if (b.bus !== undefined) t.bus = null;
   const lat = num(b.lat), lng = num(b.lng);
   if (lat != null && lng != null && Math.abs(lat) <= 90 && Math.abs(lng) <= 180) {
     t.lat = lat; t.lng = lng; t.heading = num(b.heading); t.speed = num(b.speed); t.updatedAt = Date.now();
@@ -110,7 +134,8 @@ async function handleShareApi(req, res, action) {
   if (typeof b.photo === 'string' && b.photo.length < 60000 && /^[A-Za-z0-9+/=]+$/.test(b.photo)) { t.photo = b.photo; t.photoV = (t.photoV || 0) + 1; }
   if (b.photo === null) t.photo = null;
   save();
-  return json(res, 200, { ok: true, url: '/t/' + id, needRoute: !!(t.dest && !t.route), needPhoto: !!b.wantPhoto && !t.photo });
+  return json(res, 200, { ok: true, url: '/t/' + id, needRoute: !!(t.dest && !t.route), needPhoto: !!b.wantPhoto && !t.photo,
+    needRadioLogo: !!(t.radio && !t.radioLogo) });
 }
 
 // ---------- where you are: street and town (OpenStreetMap's Nominatim, at most 1 lookup a second, cached) ----------
@@ -171,6 +196,25 @@ async function itunesSearch(q) {
   return { source: 'itunes', artists: [], tracks: (j.results || []).map(t => ({ name: t.trackName, uri: '', artists: t.artistName,
     album: t.collectionName, image: (t.artworkUrl100 || '').replace('100x100', '120x120') || null, durationMs: t.trackTimeMillis || 0 })) };
 }
+// ---------- live buses for the map (bustimes.org, which serves the government's open bus data; cached briefly) ----------
+const busCache = new Map();
+async function liveBuses(s, w, n, e) {
+  const k = [s, w, n, e].map(v => v.toFixed(2)).join(',');
+  const hit = busCache.get(k);
+  if (hit && Date.now() - hit.at < 12000) return hit.list;
+  const r = await fetch(`https://bustimes.org/vehicles.json?ymin=${s}&xmin=${w}&ymax=${n}&xmax=${e}`,
+    { headers: { 'User-Agent': 'NaviGO-ShareTrip/1.0 (personal trip sharing)', Accept: 'application/json' } });
+  if (!r.ok) throw new Error('HTTP ' + r.status);
+  const j = await r.json();
+  const list = (Array.isArray(j) ? j : []).slice(0, 300).map(v => ({
+    line: (v.service && v.service.line_name) || v.line_name || '', dest: v.destination || '',
+    lng: v.coordinates && v.coordinates[0], lat: v.coordinates && v.coordinates[1], heading: v.heading == null ? null : +v.heading
+  })).filter(v => isFinite(v.lat) && isFinite(v.lng));
+  busCache.set(k, { at: Date.now(), list });
+  if (busCache.size > 500) busCache.delete(busCache.keys().next().value);
+  return list;
+}
+
 async function musicSearch(q) {
   try { return await spotifySearch(q); }
   catch (e) { console.log('Using backup song search:', e.message); return itunesSearch(q); }
@@ -211,6 +255,13 @@ const server = http.createServer(async (req, res) => {
     res.writeHead(200, { 'Content-Type': MIME['.js'], 'Cache-Control': 'no-cache' });
     return res.end('window.MAPBOX_TOKEN = ' + JSON.stringify(MAPBOX_TOKEN) + ';');
   }
+  if (url.pathname === '/api/buses') {
+    const p = k => +url.searchParams.get(k);
+    const sb = p('s'), wb = p('w'), nb = p('n'), eb = p('e');
+    if (![sb, wb, nb, eb].every(isFinite) || nb <= sb || eb <= wb || nb - sb > 0.4 || eb - wb > 0.6) return json(res, 400, { error: 'Bad area' });
+    try { return json(res, 200, await liveBuses(sb, wb, nb, eb)); }
+    catch (err) { return json(res, 503, { error: 'Live buses not available right now' }); }
+  }
   const shareApi = url.pathname.match(/^\/api\/share\/(update|end)$/);
   if (shareApi && req.method === 'POST') return handleShareApi(req, res, shareApi[1]);
   const shareGet = url.pathname.match(/^\/api\/share\/([A-Za-z0-9]{8,16})$/);
@@ -224,6 +275,13 @@ const server = http.createServer(async (req, res) => {
     if (!t || !t.photo) { res.writeHead(404); return res.end(); }
     res.writeHead(200, { 'Content-Type': 'image/jpeg', 'Cache-Control': 'no-cache' });
     return res.end(Buffer.from(t.photo, 'base64'));
+  }
+  const radioLogo = url.pathname.match(/^\/api\/share\/([A-Za-z0-9]{8,16})\/radiologo$/);
+  if (radioLogo) {
+    const t = db.shares[radioLogo[1]];
+    if (!t || !t.radioLogo) { res.writeHead(404); return res.end(); }
+    res.writeHead(200, { 'Content-Type': 'image/png', 'Cache-Control': 'no-cache' });
+    return res.end(Buffer.from(t.radioLogo, 'base64'));
   }
   if (url.pathname === '/plan' || url.pathname === '/plan/') {   // trip planner
     return fs.readFile(path.join(PUBLIC_DIR, 'plan.html'), (err, data) => {
