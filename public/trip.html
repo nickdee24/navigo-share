@@ -119,14 +119,19 @@
     .me .busSign { position: absolute; left: 50%; top: 54px; transform: translateX(-50%); display: none; background: #111; color: #FFB020;
       border: 2px solid #fff; border-radius: 7px; padding: 0 7px; font-weight: 800; font-size: 14px; white-space: nowrap; box-shadow: 0 2px 6px rgba(0,0,0,.6); }
     .me .busSign.show { display: block; cursor: pointer; pointer-events: auto; }
+    .me .busIcon { display: none; position: absolute; left: 50%; top: 50%; width: 30px; height: 72px; margin: -36px 0 0 -15px;
+      transition: transform .8s; filter: drop-shadow(0 2px 3px rgba(0,0,0,.6)); cursor: pointer; }
+    .me.onbus .busIcon { display: block; }
+    .me.onbus .arrow { display: none !important; }
+    .me.onbus .face { inset: auto; left: 8px; top: -112px; width: 40px; height: 40px; font-size: 22px; border-width: 2px; }
+    .me.onbus .busSign { top: -68px; }
+    .me.onbus .np { bottom: 126px; }
     .me .busSign .l1 { font-family: ui-monospace, "Cascadia Mono", Menlo, monospace; font-size: 15px; }
     .me .busSign .l2 { font-family: ui-monospace, "Cascadia Mono", Menlo, monospace; font-size: 11px; text-align: center; }
     .ontime { color: #3DDC84; } .lateTime { color: #FFB020; } .lateBy { color: #FF4D4D; }
     .me .face { cursor: pointer; }
     /* tap the bus: its journey, train-style */
-    #busPanel { position: fixed; left: 12px; right: 12px; bottom: calc(84px + env(safe-area-inset-bottom)); max-width: 480px; margin: 0 auto;
-      z-index: 1100; display: none; background: rgba(23,26,31,.97); border: 1px solid var(--border); border-radius: 14px; padding: 12px 14px;
-      box-shadow: 0 8px 24px rgba(0,0,0,.5); max-height: 60vh; overflow: auto; }
+    #busPanel { display: none; max-height: 52vh; overflow: auto; }
     #busPanel.show { display: block; }
     #busPanel .hd { display: flex; align-items: center; gap: 10px; }
     #busPanel .hd .svc { font-size: 18px; padding: 2px 8px; }
@@ -179,9 +184,10 @@
       <div id="song"><span class="tag"></span><span class="st"></span><span class="txt"></span><span class="time"></span></div>
       <div id="songBar"><div></div></div>
     </div>
+    <!-- 4. tap the bus: its stops drop down here -->
+    <div class="box" id="busPanel"></div>
   </div>
 
-  <div id="busPanel"></div>
   <button id="follow" class="on" title="Follow">◎</button>
   <div id="brand">Shared from <b>NaviGO</b></div>
 
@@ -277,7 +283,11 @@
     if (!me) {
       const el = document.createElement('div'); el.style.zIndex = 5;
       el.innerHTML = '<div class="me"><div class="np"><span class="tag"></span><span class="st"></span><span class="txt"></span><span class="time"></span></div>' +
-        '<div class="arrow"></div><div class="face"></div><div class="busSign"></div></div>';
+        '<div class="arrow"></div><div class="face"></div><div class="busSign"></div>' +
+        '<svg class="busIcon" viewBox="0 0 30 72"><rect x="1" y="1" width="28" height="70" rx="6" fill="#00A9A4" stroke="#fff" stroke-width="2"/>' +
+        '<rect x="5" y="13" width="20" height="53" rx="3" fill="#F4F2EA"/><path d="M5 45 25 36v5L5 50Z" fill="#00A9A4"/>' +
+        '<rect x="4" y="4" width="22" height="8" rx="3" fill="#20303A"/><rect x="10" y="22" width="10" height="4" rx="2" fill="#C9D3D8"/>' +
+        '<rect x="10" y="56" width="10" height="4" rx="2" fill="#C9D3D8"/></svg></div>';
       me = new mapboxgl.Marker({ element: el }).setLngLat(ll).addTo(map);
       // on the bus: tap the icon or its sign for the bus's stops
       el.addEventListener('click', e => { if (data && data.mode === 'bus' && data.bus) { e.stopPropagation(); busOpen = !busOpen; fillBusPanel(data); } });
@@ -295,6 +305,8 @@
       el.querySelector('.me').classList.toggle('old', Date.now() - t.updatedAt > 120000);
       // on the bus: the bus number under the face
       const sign = el.querySelector('.busSign'), bus = t.mode === 'bus' && t.bus;
+      el.querySelector('.me').classList.toggle('onbus', t.mode === 'bus');
+      if (t.heading != null) el.querySelector('.busIcon').style.transform = 'rotate(' + t.heading + 'deg)';
       sign.classList.toggle('show', !!bus);
       if (bus) {
         // like the app: number, arrival time (green on time / orange + red minutes late), stops left
