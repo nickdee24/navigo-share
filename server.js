@@ -115,7 +115,7 @@ async function handleShareApi(req, res, action) {
     // the bus's journey (when known): where it's going, arrival time, minutes late, stops left and the stops to come
     if (b.bus.destination !== undefined) {
       Object.assign(t.bus, { destination: String(b.bus.destination || '').slice(0, 80), street: String(b.bus.street || '').slice(0, 80),
-        eta: num(b.bus.eta), delayMin: num(b.bus.delayMin) || 0, stopsLeft: num(b.bus.stopsLeft),
+        eta: num(b.bus.eta), delayMin: num(b.bus.delayMin) || 0, stopsLeft: num(b.bus.stopsLeft), getOff: String(b.bus.getOff || '').slice(0, 80),
         stops: Array.isArray(b.bus.stops) ? b.bus.stops.slice(0, 60).map(x => ({ name: String((x && x.name) || '').slice(0, 80), t: num(x && x.t) })) : [] });
     }
   }
@@ -206,7 +206,8 @@ async function liveBuses(s, w, n, e) {
     { headers: { 'User-Agent': 'NaviGO-ShareTrip/1.0 (personal trip sharing)', Accept: 'application/json' } });
   if (!r.ok) throw new Error('HTTP ' + r.status);
   const j = await r.json();
-  const list = (Array.isArray(j) ? j : []).slice(0, 300).map(v => ({
+  const list = (Array.isArray(j) ? j : []).slice(0, 600).map(v => ({
+    id: String(v.id || v.slug || ''),
     line: (v.service && v.service.line_name) || v.line_name || '', dest: v.destination || '',
     lng: v.coordinates && v.coordinates[0], lat: v.coordinates && v.coordinates[1], heading: v.heading == null ? null : +v.heading
   })).filter(v => isFinite(v.lat) && isFinite(v.lng));
@@ -258,7 +259,7 @@ const server = http.createServer(async (req, res) => {
   if (url.pathname === '/api/buses') {
     const p = k => +url.searchParams.get(k);
     const sb = p('s'), wb = p('w'), nb = p('n'), eb = p('e');
-    if (![sb, wb, nb, eb].every(isFinite) || nb <= sb || eb <= wb || nb - sb > 0.4 || eb - wb > 0.6) return json(res, 400, { error: 'Bad area' });
+    if (![sb, wb, nb, eb].every(isFinite) || nb <= sb || eb <= wb || nb - sb > 0.8 || eb - wb > 1.4) return json(res, 400, { error: 'Bad area' });
     try { return json(res, 200, await liveBuses(sb, wb, nb, eb)); }
     catch (err) { return json(res, 503, { error: 'Live buses not available right now' }); }
   }

@@ -161,6 +161,8 @@
     #busPanel li:first-child, #busPanel li:last-child { font-weight: 700; }
     #busPanel li:first-child::after, #busPanel li:last-child::after { background: #FFB020; }
     #busPanel li .tm { flex: none; font-variant-numeric: tabular-nums; }
+    #busPanel li.mine { font-weight: 700; background: rgba(255,176,32,.18); border-radius: 6px; }
+    #busPanel li.after { opacity: .5; }
     .flag { font-size: 30px; line-height: 1; filter: drop-shadow(0 2px 3px rgba(0,0,0,.6)); }
   </style>
 </head>
@@ -362,9 +364,12 @@
     if (b.street) h += '<div class="sub">Now on ' + esc(b.street) + '</div>';
     if (b.eta) h += '<div class="arr"><span class="' + (late ? 'lateTime' : 'ontime') + '">Arrives ' + clock(b.eta) + '</span>' +
       (late ? ' <span class="lateBy">+' + b.delayMin + ' min</span>' : ' <span class="ontime" style="font-weight:400;font-size:13px">On time</span>') + '</div>';
-    if (b.stopsLeft != null) h += '<div class="sub">' + b.stopsLeft + (b.stopsLeft === 1 ? ' stop left' : ' stops left') + '</div>';
+    if (b.stopsLeft != null) h += '<div class="sub">' + b.stopsLeft + (b.stopsLeft === 1 ? ' stop left' : ' stops left') +
+      (b.getOff ? ' to <b>' + esc(b.getOff) + '</b>' : '') + '</div>';
     if (b.stops && b.stops.length) {
-      h += '<h4>Stopping at</h4><ol>' + b.stops.map(x => '<li><span>' + esc(x.name) + '</span><span class="tm ' + (late ? 'lateTime' : 'ontime') + '">' +
+      const mine = b.getOff ? b.stops.findIndex(x => x.name === b.getOff) : -1;
+      h += '<h4>Stopping at</h4><ol>' + b.stops.map((x, i) => '<li class="' + (i === mine ? 'mine' : mine >= 0 && i > mine ? 'after' : '') + '"><span>' +
+        (i === mine ? '🏁 ' : '') + esc(x.name) + '</span><span class="tm ' + (late ? 'lateTime' : 'ontime') + '">' +
         (x.t ? clock(x.t) : '') + '</span></li>').join('') + '</ol>';
     } else h += '<div class="sub">The bus\'s stops aren\'t available right now.</div>';
     p.innerHTML = h;
@@ -548,37 +553,107 @@
   let busMarks = [], busTimer = null;
   const miniBus = '<svg viewBox="0 0 16 36"><rect x=".8" y=".8" width="14.4" height="34.4" rx="3.5" fill="#00A9A4" stroke="#fff" stroke-width="1.4"/><rect x="3" y="7" width="10" height="26" rx="2" fill="#F4F2EA"/><rect x="2.5" y="2.5" width="11" height="4" rx="1.5" fill="#20303A"/></svg>';
   function tip(text) { const t = $('busesTip'); t.textContent = text; t.style.display = 'block'; clearTimeout(tip.h); tip.h = setTimeout(() => t.style.display = 'none', 2500); }
-  function clearBuses() { busMarks.forEach(m => m.remove()); busMarks = []; }
+  // Each bus keeps its own marker and glides to its new spot over the next update period, so buses move smoothly.
+  const BUS_POLL = 10000;
+  const buses = new Map();   // id -> { m, el, svg, from, to, t0, heading, raw }
+  function clearBuses() { buses.forEach(b => b.m.remove()); buses.clear(); }
+  const bearing = (a, b) => {
+    const r = Math.PI / 180, y = Math.sin((b[0] - a[0]) * r) * Math.cos(b[1] * r),
+      x = Math.cos(a[1] * r) * Math.sin(b[1] * r) - Math.sin(a[1] * r) * Math.cos(b[1] * r) * Math.cos((b[0] - a[0]) * r);
+    return (Math.atan2(y, x) / r + 360) % 360;
+  };
+  const metres = (a, b) => { const k = 111320 * Math.cos(a[1] * Math.PI / 180); return Math.hypot((b[0] - a[0]) * k, (b[1] - a[1]) * 111320); };
+  const angDiff = (a, b) => ((a - b + 540) % 360) - 180;
+  // Road centre lines drawn on screen now, to put each bus on the road it's driving along (bus GPS is often a few metres off)
+  function roadLines() {
+    if (!map.getStyle || !map.queryRenderedFeatures) return [];
+    const skip = /label|shield|exit|oneway|arrow|pedestrian|path|steps|rail|case/;
+    const ids = (map.getStyle().layers || []).map(l => l.id).filter(id => /^(road|bridge|tunnel)/.test(id) && !skip.test(id));
+    if (!ids.length) return [];
+    const lines = [];
+    try {
+      map.queryRenderedFeatures({ layers: ids }).forEach(f => {
+        const c = f.properties && f.properties.class;
+        if (/path|pedestrian|track|rail|aerialway|golf|ferry/.test(c || '')) return;
+        const g = f.geometry; if (!g) return;
+        if (g.type === 'LineString') lines.push(g.coordinates);
+        else if (g.type === 'MultiLineString') g.coordinates.forEach(l => lines.push(l));
+      });
+    } catch (e) {}
+    return lines;
+  }
+  function snap(p, lines) {
+    const k = 111320 * Math.cos(p[1] * Math.PI / 180);
+    let best = null, bestD = 30;
+    for (const line of lines) for (let i = 0; i + 1 < line.length; i++) {
+      const a = line[i], b = line[i + 1];
+      const ax = (a[0] - p[0]) * k, ay = (a[1] - p[1]) * 111320, bx = (b[0] - p[0]) * k, by = (b[1] - p[1]) * 111320;
+      if (Math.min(ax, bx) > bestD || Math.max(ax, bx) < -bestD || Math.min(ay, by) > bestD || Math.max(ay, by) < -bestD) continue;
+      const dx = bx - ax, dy = by - ay, l2 = dx * dx + dy * dy; if (l2 < 0.01) continue;
+      const t = Math.max(0, Math.min(1, -(ax * dx + ay * dy) / l2)), qx = ax + t * dx, qy = ay + t * dy, d = Math.hypot(qx, qy);
+      if (d < bestD) { bestD = d; best = { p: [p[0] + qx / k, p[1] + qy / 111320], road: bearing(a, b) }; }
+    }
+    return best;
+  }
   async function loadBuses() {
     clearTimeout(busTimer);
     if (!busesOn) { clearBuses(); return; }
-    busTimer = setTimeout(loadBuses, 15000);
-    if (!map.getBounds || map.getZoom() < 12) { clearBuses(); return; }
-    const b = map.getBounds();
-    const q = 's=' + b.getSouth().toFixed(4) + '&w=' + b.getWest().toFixed(4) + '&n=' + b.getNorth().toFixed(4) + '&e=' + b.getEast().toFixed(4);
+    busTimer = setTimeout(loadBuses, BUS_POLL);
+    if (!map.getBounds) return;
+    // zoomed right out: only about 80 km round the middle of the screen (the whole country is too much)
+    const b = map.getBounds(), c = map.getCenter(), hl = 0.36, hw = 0.36 / Math.cos(c.lat * Math.PI / 180);
+    const s = Math.max(b.getSouth(), c.lat - hl), n = Math.min(b.getNorth(), c.lat + hl), w = Math.max(b.getWest(), c.lng - hw), e = Math.min(b.getEast(), c.lng + hw);
+    const q = 's=' + s.toFixed(4) + '&w=' + w.toFixed(4) + '&n=' + n.toFixed(4) + '&e=' + e.toFixed(4);
     try {
       const r = await fetch('/api/buses?' + q, { cache: 'no-store' });
       if (!r.ok) return;
-      const list = await r.json();
+      const list = (await r.json()).sort((a, b) => metres([c.lng, c.lat], [a.lng, a.lat]) - metres([c.lng, c.lat], [b.lng, b.lat])).slice(0, 400);
       if (!busesOn) return;
-      clearBuses();
+      const z = map.getZoom(), size = z >= 14 ? 1 : z >= 12 ? 0.8 : z >= 10 ? 0.6 : 0.45, showNum = z >= 11;
+      const lines = z >= 13 ? roadLines() : [];
+      const now = performance.now(), seen = new Set();
       list.forEach(v => {
-        const el = document.createElement('div'); el.className = 'lbus';
-        el.innerHTML = miniBus + '<b></b>';
-        el.querySelector('b').textContent = v.line;
-        if (v.heading != null) el.querySelector('svg').style.transform = 'rotate(' + v.heading + 'deg)';
-        el.title = 'Bus ' + v.line + (v.dest ? ' to ' + v.dest : '');
-        el.addEventListener('click', e => { e.stopPropagation(); tip(el.title); });
-        busMarks.push(new mapboxgl.Marker({ element: el }).setLngLat([v.lng, v.lat]).addTo(map));
+        const id = v.id || (v.line + v.dest); seen.add(id);
+        const raw = [v.lng, v.lat];
+        let o = buses.get(id);
+        let heading = o && o.raw && metres(o.raw, raw) > 8 ? bearing(o.raw, raw) : (o && o.heading != null ? o.heading : v.heading);
+        let pos = raw;
+        const sn = snap(raw, lines);
+        if (sn) { pos = sn.p; heading = heading == null ? sn.road : (Math.abs(angDiff(sn.road, heading)) <= 90 ? sn.road : (sn.road + 180) % 360); }
+        if (!o) {
+          const el = document.createElement('div'); el.className = 'lbus';
+          el.innerHTML = miniBus + '<b></b>';
+          el.addEventListener('click', ev => { ev.stopPropagation(); tip(el.title); });
+          o = { el, svg: el.querySelector('svg'), m: new mapboxgl.Marker({ element: el }).setLngLat(pos).addTo(map), from: pos, to: pos, t0: now };
+          buses.set(id, o);
+        } else {
+          const cur = o.m.getLngLat().toArray();
+          if (metres(cur, pos) > 1500) { o.from = o.to = pos; o.m.setLngLat(pos); } else { o.from = cur; o.to = pos; o.t0 = now; }
+        }
+        o.raw = raw; o.heading = heading;
+        o.el.querySelector('b').textContent = showNum ? v.line : '';
+        o.el.title = 'Bus ' + v.line + (v.dest ? ' to ' + v.dest : '');
+        o.svg.style.transform = 'rotate(' + (heading || 0) + 'deg) scale(' + size + ')';
       });
+      buses.forEach((o, id) => { if (!seen.has(id)) { o.m.remove(); buses.delete(id); } });
     } catch (e) { /* try again next time */ }
   }
+  (function glide() {
+    const now = performance.now();
+    buses.forEach(o => {
+      if (o.from === o.to) return;
+      const t = Math.min(1, (now - o.t0) / BUS_POLL);
+      o.m.setLngLat([o.from[0] + (o.to[0] - o.from[0]) * t, o.from[1] + (o.to[1] - o.from[1]) * t]);
+      if (t >= 1) o.from = o.to;
+    });
+    requestAnimationFrame(glide);
+  })();
   $('busesBtn').classList.toggle('on', busesOn);
   $('busesBtn').onclick = () => {
     busesOn = !busesOn;
     try { localStorage.setItem('navigoBuses', busesOn ? 'on' : 'off'); } catch (e) {}
     $('busesBtn').classList.toggle('on', busesOn);
-    tip(busesOn ? 'Live buses on (zoom in to see them)' : 'Live buses off');
+    tip(busesOn ? 'Live buses on' : 'Live buses off');
     loadBuses();
   };
   map.on('moveend', () => { if (busesOn) { clearTimeout(loadBuses.d); loadBuses.d = setTimeout(loadBuses, 600); } });
