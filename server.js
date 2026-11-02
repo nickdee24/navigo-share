@@ -115,7 +115,7 @@ async function handleShareApi(req, res, action) {
     // the bus's journey (when known): where it's going, arrival time, minutes late, stops left and the stops to come
     if (b.bus.destination !== undefined) {
       Object.assign(t.bus, { destination: String(b.bus.destination || '').slice(0, 80), street: String(b.bus.street || '').slice(0, 80),
-        eta: num(b.bus.eta), delayMin: num(b.bus.delayMin) || 0, stopsLeft: num(b.bus.stopsLeft), getOff: String(b.bus.getOff || '').slice(0, 80),
+        eta: num(b.bus.eta), delayMin: num(b.bus.delayMin) || 0, stopsLeft: num(b.bus.stopsLeft), stopNo: num(b.bus.stopNo), stopOf: num(b.bus.stopOf), getOff: String(b.bus.getOff || '').slice(0, 80),
         stops: Array.isArray(b.bus.stops) ? b.bus.stops.slice(0, 60).map(x => ({ name: String((x && x.name) || '').slice(0, 80), t: num(x && x.t) })) : [] });
     }
   }
