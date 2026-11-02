@@ -572,8 +572,11 @@
   let busMarks = [], busTimer = null;
   const miniBus = '<img src="/bus_top.png" alt="">';
   function tip(text) { const t = $('busesTip'); t.textContent = text; t.style.display = 'block'; clearTimeout(tip.h); tip.h = setTimeout(() => t.style.display = 'none', 2500); }
-  // Each bus keeps its own marker and glides to its new spot over the next update period, so buses move smoothly.
-  const BUS_POLL = 10000;
+  // Buses only report where they are every 10-30 s, and the report is already a few seconds old when it arrives.
+  // So between reports each bus keeps driving: from its last report, at the speed it's been doing, along the road,
+  // and when a new report comes in it eases onto it. That way they move all the time instead of jumping every 10 s.
+  const BUS_POLL = 5000;
+  let busLines = [], busSize = 1;
   const buses = new Map();   // id -> { m, el, svg, from, to, t0, heading, raw }
   function clearBuses() { buses.forEach(b => b.m.remove()); buses.clear(); }
   const bearing = (a, b) => {
@@ -632,29 +635,38 @@
       if (!busesOn) return;
       const z = map.getZoom(), size = z >= 16 ? 1.5 : z >= 15 ? 1.25 : z >= 14 ? 1.05 : z >= 12 ? 0.8 : z >= 10 ? 0.6 : 0.45, showNum = z >= 11;
       const lines = z >= 13 ? roadLines() : [];
-      const now = performance.now(), seen = new Set();
+      busLines = lines; busSize = size;
+      const now = performance.now(), wall = Date.now(), seen = new Set();
       list.forEach(v => {
         const id = v.id || (v.line + v.dest); seen.add(id);
-        const raw = [v.lng, v.lat];
+        const raw = [v.lng, v.lat], at = Math.min(v.at || wall, wall);
         let o = buses.get(id);
-        let heading = o && o.raw && metres(o.raw, raw) > 8 ? bearing(o.raw, raw) : (o && o.heading != null ? o.heading : v.heading);
-        let pos = raw;
-        const sn = snap(raw, lines);
-        if (sn) { pos = sn.p; heading = heading == null ? sn.road : (Math.abs(angDiff(sn.road, heading)) <= 90 ? sn.road : (sn.road + 180) % 360); }
+        const sn = snap(raw, lines), pos = sn ? sn.p : raw;
         if (!o) {
           const el = document.createElement('div'); el.className = 'lbus';
           el.innerHTML = miniBus + '<b></b>';
           el.addEventListener('click', ev => { ev.stopPropagation(); tip(el.title); });
-          o = { el, svg: el.querySelector('img'), m: new mapboxgl.Marker({ element: el }).setLngLat(pos).addTo(map), from: pos, to: pos, t0: now };
+          let heading = v.heading;
+          if (sn) heading = heading == null ? sn.road : (Math.abs(angDiff(sn.road, heading)) <= 90 ? sn.road : (sn.road + 180) % 360);
+          o = { el, svg: el.querySelector('img'), m: new mapboxgl.Marker({ element: el }).setLngLat(pos).addTo(map),
+            fix: pos, rawFix: raw, fixAt: at, speed: 0, heading, from: pos, t0: now, shown: pos, rot: null };
           buses.set(id, o);
-        } else {
-          const cur = o.m.getLngLat().toArray();
-          if (metres(cur, pos) > 1500) { o.from = o.to = pos; o.m.setLngLat(pos); } else { o.from = cur; o.to = pos; o.t0 = now; }
+        } else if (at > o.fixAt + 500) {
+          // a new report: how fast and which way it's been going since the last one
+          const d = metres(o.rawFix, raw), secs = (at - o.fixAt) / 1000;
+          if (d > 4 && secs > 0) {
+            const spd = Math.min(22, d / secs);
+            o.speed = o.speed ? o.speed * 0.4 + spd * 0.6 : spd;
+            o.heading = bearing(o.rawFix, raw);
+            if (sn) o.heading = Math.abs(angDiff(sn.road, o.heading)) <= 90 ? sn.road : (sn.road + 180) % 360;
+          } else o.speed = 0;                                   // hasn't moved: stopped (at a stop or lights)
+          o.fix = pos; o.rawFix = raw; o.fixAt = at;
+          o.from = o.shown; o.t0 = now;                          // ease from where it's drawn now onto the new track
+          if (metres(o.shown, pos) > 1500) { o.from = pos; }
         }
-        o.raw = raw; o.heading = heading;
         o.el.querySelector('b').textContent = showNum ? v.line : '';
         o.el.title = 'Bus ' + v.line + (v.dest ? ' to ' + v.dest : '');
-        o.svg.style.transform = 'rotate(' + (heading || 0) + 'deg) scale(' + size + ')';
+        o.rot = null;   // redraw the icon at the new size
         o.el.style.setProperty('--lift', Math.round(18 * size + 3) + 'px');   // number sits just above the bus whichever way it faces
         o.line = v.line;
       });
@@ -725,11 +737,28 @@
   (function glide() {
     const now = performance.now();
     update3d(now); declutter(false);
+    const wall = Date.now(), doSnap = now - (glide.snapAt || 0) > 200;
+    if (doSnap) glide.snapAt = now;
     buses.forEach(o => {
-      if (o.from === o.to) return;
-      const t = Math.min(1, (now - o.t0) / BUS_POLL);
-      o.m.setLngLat([o.from[0] + (o.to[0] - o.from[0]) * t, o.from[1] + (o.to[1] - o.from[1]) * t]);
-      if (t >= 1) o.from = o.to;
+      // where it should be by now: driven on from its last report (for up to 40 s; after that it's probably stopped)
+      const secs = Math.max(0, Math.min(40, (wall - o.fixAt) / 1000));
+      let pred = o.fix, hd = o.heading;
+      if (o.speed > 0.5 && hd != null) {
+        const dist = o.speed * secs, r = hd * Math.PI / 180;
+        pred = [o.fix[0] + dist * Math.sin(r) / (111320 * Math.cos(o.fix[1] * Math.PI / 180)), o.fix[1] + dist * Math.cos(r) / 111320];
+        if (busLines.length) {
+          if (doSnap || !o.snapPred) { const sn = snap(pred, busLines); o.snapPred = sn ? { p: sn.p, road: sn.road, from: pred } : null; }
+          if (o.snapPred && metres(o.snapPred.from, pred) < 15) {
+            pred = [pred[0] + o.snapPred.p[0] - o.snapPred.from[0], pred[1] + o.snapPred.p[1] - o.snapPred.from[1]];
+            hd = Math.abs(angDiff(o.snapPred.road, hd)) <= 90 ? o.snapPred.road : (o.snapPred.road + 180) % 360;
+          }
+        }
+      }
+      const k = Math.min(1, (now - o.t0) / 1500);
+      const p = k >= 1 ? pred : [o.from[0] + (pred[0] - o.from[0]) * k, o.from[1] + (pred[1] - o.from[1]) * k];
+      o.shown = p; o.m.setLngLat(p);
+      const rot = Math.round(hd || 0);
+      if (rot !== o.rot) { o.rot = rot; o.svg.style.transform = 'rotate(' + rot + 'deg) scale(' + busSize + ')'; }
     });
     requestAnimationFrame(glide);
   })();

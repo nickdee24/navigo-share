@@ -214,7 +214,7 @@ function sirivm(xml) {
     const b = tag(blk, 'Bearing');
     out.push({ id: tag(blk, 'VehicleRef') || (tag(blk, 'OperatorRef') + lat + lng),
       line: tag(blk, 'PublishedLineName') || tag(blk, 'LineRef'), dest: tag(blk, 'DestinationName').replace(/_/g, ' '),
-      lat, lng, heading: b === '' ? null : +b });
+      lat, lng, heading: b === '' ? null : +b, at: isFinite(at) ? at : null });
   }
   return out;
 }
@@ -229,7 +229,7 @@ async function liveBuses(s, w, n, e) {
   if (!BODS_KEY) throw new Error('No BODS_KEY set');
   const k = [s, w, n, e].map(v => v.toFixed(2)).join(',');
   const hit = busCache.get(k);
-  if (hit && Date.now() - hit.at < 10000) return hit.list;
+  if (hit && Date.now() - hit.at < 4000) return hit.list;
   let list = await bodsBox(s, w, n, e, bodsLonFirst);
   if (!list.length) { const other = await bodsBox(s, w, n, e, !bodsLonFirst).catch(() => []); if (other.length) { bodsLonFirst = !bodsLonFirst; list = other; } }
   list = list.slice(0, 600);
