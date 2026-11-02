@@ -196,21 +196,43 @@ async function itunesSearch(q) {
   return { source: 'itunes', artists: [], tracks: (j.results || []).map(t => ({ name: t.trackName, uri: '', artists: t.artistName,
     album: t.collectionName, image: (t.artworkUrl100 || '').replace('100x100', '120x120') || null, durationMs: t.trackTimeMillis || 0 })) };
 }
-// ---------- live buses for the map (bustimes.org, which serves the government's open bus data; cached briefly) ----------
+// ---------- live buses for the map: the government's Bus Open Data Service live feed (SIRI-VM), cached briefly ----------
+// Needs Nick's free BODS key in Render's Environment as BODS_KEY (never in the code).
+const BODS_KEY = process.env.BODS_KEY || '';
 const busCache = new Map();
+let bodsLonFirst = true;   // which way round the feed wants its box; flipped if one way returns nothing
+function sirivm(xml) {
+  const now = Date.now(), out = [];
+  const tag = (blk, t) => { const m = blk.match(new RegExp('<' + t + '>([^<]*)</' + t + '>')); return m ? m[1].trim() : ''; };
+  for (const m of xml.matchAll(/<VehicleActivity>([\s\S]*?)<\/VehicleActivity>/g)) {
+    const blk = m[1];
+    const loc = (blk.match(/<VehicleLocation>([\s\S]*?)<\/VehicleLocation>/) || [])[1] || '';
+    const lat = +tag(loc, 'Latitude'), lng = +tag(loc, 'Longitude');
+    if (!isFinite(lat) || !isFinite(lng) || (!lat && !lng)) continue;
+    const at = Date.parse(tag(blk, 'RecordedAtTime'));
+    if (isFinite(at) && now - at > 600000) continue;          // not heard from for 10 minutes: parked up
+    const b = tag(blk, 'Bearing');
+    out.push({ id: tag(blk, 'VehicleRef') || (tag(blk, 'OperatorRef') + lat + lng),
+      line: tag(blk, 'PublishedLineName') || tag(blk, 'LineRef'), dest: tag(blk, 'DestinationName').replace(/_/g, ' '),
+      lat, lng, heading: b === '' ? null : +b });
+  }
+  return out;
+}
+async function bodsBox(s, w, n, e, lonFirst) {
+  const box = lonFirst ? `${w},${s},${e},${n}` : `${s},${n},${w},${e}`;
+  const r = await fetch(`https://data.bus-data.dft.gov.uk/api/v1/datafeed/?boundingBox=${box}&api_key=${encodeURIComponent(BODS_KEY)}`,
+    { headers: { 'User-Agent': 'NaviGO-ShareTrip/1.0 (personal trip sharing)' } });
+  if (!r.ok) throw new Error('HTTP ' + r.status);
+  return sirivm(await r.text()).filter(v => v.lat >= s && v.lat <= n && v.lng >= w && v.lng <= e);
+}
 async function liveBuses(s, w, n, e) {
+  if (!BODS_KEY) throw new Error('No BODS_KEY set');
   const k = [s, w, n, e].map(v => v.toFixed(2)).join(',');
   const hit = busCache.get(k);
-  if (hit && Date.now() - hit.at < 12000) return hit.list;
-  const r = await fetch(`https://bustimes.org/vehicles.json?ymin=${s}&xmin=${w}&ymax=${n}&xmax=${e}`,
-    { headers: { 'User-Agent': 'NaviGO-ShareTrip/1.0 (personal trip sharing)', Accept: 'application/json' } });
-  if (!r.ok) throw new Error('HTTP ' + r.status);
-  const j = await r.json();
-  const list = (Array.isArray(j) ? j : []).slice(0, 600).map(v => ({
-    id: String(v.id || v.slug || ''),
-    line: (v.service && v.service.line_name) || v.line_name || '', dest: v.destination || '',
-    lng: v.coordinates && v.coordinates[0], lat: v.coordinates && v.coordinates[1], heading: v.heading == null ? null : +v.heading
-  })).filter(v => isFinite(v.lat) && isFinite(v.lng));
+  if (hit && Date.now() - hit.at < 10000) return hit.list;
+  let list = await bodsBox(s, w, n, e, bodsLonFirst);
+  if (!list.length) { const other = await bodsBox(s, w, n, e, !bodsLonFirst).catch(() => []); if (other.length) { bodsLonFirst = !bodsLonFirst; list = other; } }
+  list = list.slice(0, 600);
   busCache.set(k, { at: Date.now(), list });
   if (busCache.size > 500) busCache.delete(busCache.keys().next().value);
   return list;

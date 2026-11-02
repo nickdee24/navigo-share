@@ -10,3 +10,5 @@ services:
     envVars:
       - key: MAPBOX_TOKEN
         sync: false   # paste your Mapbox public (pk.) token in Render → Environment
+      - key: BODS_KEY
+        sync: false   # Nick's Bus Open Data Service key (live buses), paste it in Render -> Environment
