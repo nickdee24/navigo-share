@@ -93,7 +93,7 @@
     #busesTip { position: fixed; right: 72px; bottom: calc(92px + env(safe-area-inset-bottom)); z-index: 1000; font-size: 12px; color: var(--text);
       background: rgba(23,26,31,.94); border: 1px solid var(--border); border-radius: 10px; padding: 5px 9px; display: none; }
     .lbus { position: relative; width: 16px; height: 36px; pointer-events: auto; cursor: pointer; }
-    .lbus img { position: absolute; left: 3px; top: 0; width: 10px; height: 36px; transition: transform .8s; filter: drop-shadow(0 1px 2px rgba(0,0,0,.6)); }
+    .lbus img, .lbus svg.bi { position: absolute; left: 0; top: 0; width: 16px; height: 36px; transition: transform .8s; filter: drop-shadow(0 1px 2px rgba(0,0,0,.6)); }
     .lbus svg { position: absolute; inset: 0; transition: transform .8s; filter: drop-shadow(0 1px 2px rgba(0,0,0,.6)); }
     .lbus b { position: absolute; left: 50%; bottom: calc(50% + var(--lift, 22px)); transform: translate(-50%, var(--dy, 0px)); transition: transform .3s; font: 800 11px ui-monospace, Menlo, monospace; color: #FFB020;
       background: #111; border-radius: 4px; padding: 0 3px; white-space: nowrap; }
@@ -150,10 +150,9 @@
     @keyframes ledScroll { from { transform: translateX(0); } to { transform: translateX(-100%); } }
     .me .busSign .l2 { display: table; margin: 4px auto 0; background: #1B1F27; color: #E9EDF3; border-radius: 999px; padding: 3px 10px;
       font: 700 11px system-ui, sans-serif; box-shadow: 0 2px 6px rgba(0,0,0,.6); }
-    .me .busIcon { display: none; position: absolute; left: 50%; top: 50%; width: 22px; height: 92px; margin: -46px 0 0 -11px;
+    .me .busIcon { display: none; position: absolute; left: 50%; top: 50%; width: 30px; height: 72px; margin: -36px 0 0 -15px;
       transition: transform .8s; filter: drop-shadow(0 2px 3px rgba(0,0,0,.6)); cursor: pointer; }
     .me.onbus .busIcon { display: block; }
-    .me.onbus.bus3d .busIcon { display: none; }   /* zoomed in: the 3D bus is drawn instead */
     .me.onbus .arrow { display: none !important; }
     .me.onbus .face { inset: auto; left: 8px; top: -138px; width: 40px; height: 40px; font-size: 22px; border-width: 2px; }
     .me.onbus .busSign { top: -94px; }
@@ -321,7 +320,11 @@
       const el = document.createElement('div'); el.style.zIndex = 5;
       el.innerHTML = '<div class="me"><div class="np"><span class="tag"></span><span class="st"></span><span class="txt"></span><span class="time"></span></div>' +
         '<div class="arrow"></div><div class="face"></div><div class="busSign"></div>' +
-        '<img class="busIcon" src="/bus_top.png" alt=""></div>';
+        // the drawn bus Nick prefers (aquamarine, white roof, swoosh), not the Arriva picture
+        '<svg class="busIcon" viewBox="0 0 30 72"><rect x="1" y="1" width="28" height="70" rx="6" fill="#00A9A4" stroke="#fff" stroke-width="2"/>' +
+        '<rect x="5" y="13" width="20" height="53" rx="3" fill="#F4F2EA"/><path d="M5 45 25 36v5L5 50Z" fill="#00A9A4"/>' +
+        '<rect x="4" y="4" width="22" height="8" rx="3" fill="#20303A"/><rect x="10" y="22" width="10" height="4" rx="2" fill="#C9D3D8"/>' +
+        '<rect x="10" y="56" width="10" height="4" rx="2" fill="#C9D3D8"/></svg></div>';
       me = new mapboxgl.Marker({ element: el }).setLngLat(ll).addTo(map);
       // on the bus: tap the icon or its sign for the bus's stops
       el.addEventListener('click', e => { if (data && data.mode === 'bus' && data.bus) { e.stopPropagation(); busOpen = !busOpen; fillBusPanel(data); } });
@@ -578,7 +581,7 @@
   let busesOn = true;
   try { busesOn = localStorage.getItem('navigoBuses') !== 'off'; } catch (e) {}
   let busMarks = [], busTimer = null;
-  const miniBus = '<img src="/bus_top.png" alt="">';
+  const miniBus = '<svg class="bi" viewBox="0 0 16 36"><rect x=".8" y=".8" width="14.4" height="34.4" rx="3.5" fill="#00A9A4" stroke="#fff" stroke-width="1.4"/><rect x="3" y="7" width="10" height="26" rx="2" fill="#F4F2EA"/><path d="M3 23 13 18.5v2.5L3 25.5Z" fill="#00A9A4"/><rect x="2.5" y="2.5" width="11" height="4" rx="1.5" fill="#20303A"/></svg>';
   function tip(text) { const t = $('busesTip'); t.textContent = text; t.style.display = 'block'; clearTimeout(tip.h); tip.h = setTimeout(() => t.style.display = 'none', 2500); }
   // Buses jump straight to each new reported spot (Nick prefers that to gliding). Checked every 5 s.
   const BUS_POLL = 5000;
@@ -654,7 +657,7 @@
           el.addEventListener('click', ev => { ev.stopPropagation(); tip(el.title); });
           let heading = v.heading;
           if (sn) heading = heading == null ? sn.road : (Math.abs(angDiff(sn.road, heading)) <= 90 ? sn.road : (sn.road + 180) % 360);
-          o = { el, svg: el.querySelector('img'), m: new mapboxgl.Marker({ element: el }).setLngLat(pos).addTo(map),
+          o = { el, svg: el.querySelector('svg'), m: new mapboxgl.Marker({ element: el }).setLngLat(pos).addTo(map),
             fix: pos, rawFix: raw, fixAt: at, speed: 0, heading, from: pos, t0: now, shown: pos, rot: null };
           buses.set(id, o);
         } else if (at > o.fixAt + 500) {
@@ -692,8 +695,9 @@
     buses.forEach((o, id) => { o.el.style.display = id === twin ? 'none' : ''; o.twin = id === twin; });
   }
   // 3D buses (Nick's Arriva bus) when zoomed in
-  const BUS3D_ZOOM = 14;
+  const BUS3D_ZOOM = 99;   // 3D buses switched off: Nick prefers the flat drawn bus at every zoom
   function add3dBuses() {
+    if (BUS3D_ZOOM > 30) return;   // switched off (flat buses only), so don't download the 3D model
     try {
       if (!map.hasModel || !map.hasModel('arriva-bus')) map.addModel('arriva-bus', location.origin + '/arriva_bus.glb');
       if (!map.getSource('live-bus-3d')) map.addSource('live-bus-3d', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
