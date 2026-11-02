@@ -644,20 +644,25 @@
     const skip = /label|shield|exit|oneway|arrow|pedestrian|path|steps|rail|case/;
     const ids = (map.getStyle().layers || []).map(l => l.id).filter(id => /^(road|bridge|tunnel)/.test(id) && !skip.test(id));
     if (!ids.length) return [];
-    const lines = [];
+    const lines = []; lines.major = [];   // major: A/B roads and the like (motorway..tertiary)
     try {
       map.queryRenderedFeatures({ layers: ids }).forEach(f => {
         const c = f.properties && f.properties.class;
         if (/path|pedestrian|track|rail|aerialway|golf|ferry|service/.test(c || '')) return;   // service = car parks, driveways
         const g = f.geometry; if (!g) return;
-        if (g.type === 'LineString') lines.push(g.coordinates);
-        else if (g.type === 'MultiLineString') g.coordinates.forEach(l => lines.push(l));
+        const add = l => { lines.push(l); if (/^(motorway|trunk|primary|secondary|tertiary)/.test(c || '')) lines.major.push(l); };
+        if (g.type === 'LineString') add(g.coordinates);
+        else if (g.type === 'MultiLineString') g.coordinates.forEach(add);
       });
     } catch (e) {}
     return lines;
   }
-  // nearest road within 50 m; if the feed puts it further off (a bad GPS fix in a field), the nearest road within 200 m
-  function snap(p, lines) { return snapIn(p, lines, 50) || snapIn(p, lines, 200); }
+  // Main roads first (Nick: don't snap onto side roads): a main road within 35 m wins, else any road within 50 m
+  // (estate routes like the 375), and a bad GPS fix out in a field goes to a main road within 200 m, else any road
+  function snap(p, lines) {
+    const major = lines.major || [];
+    return snapIn(p, major, 35) || snapIn(p, lines, 50) || snapIn(p, major, 200) || snapIn(p, lines, 200);
+  }
   function snapIn(p, lines, maxD) {
     const k = 111320 * Math.cos(p[1] * Math.PI / 180);
     let best = null, bestD = maxD;   // bus GPS can be well off, and the feed often reports from a layover spot beside the road
