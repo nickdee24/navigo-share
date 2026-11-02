@@ -653,9 +653,11 @@
     } catch (e) {}
     return lines;
   }
-  function snap(p, lines) {
+  // nearest road within 50 m; if the feed puts it further off (a bad GPS fix in a field), the nearest road within 200 m
+  function snap(p, lines) { return snapIn(p, lines, 50) || snapIn(p, lines, 200); }
+  function snapIn(p, lines, maxD) {
     const k = 111320 * Math.cos(p[1] * Math.PI / 180);
-    let best = null, bestD = 50;   // bus GPS can be well off, and the feed often reports from a layover spot beside the road
+    let best = null, bestD = maxD;   // bus GPS can be well off, and the feed often reports from a layover spot beside the road
     for (const line of lines) for (let i = 0; i + 1 < line.length; i++) {
       const a = line[i], b = line[i + 1];
       const ax = (a[0] - p[0]) * k, ay = (a[1] - p[1]) * 111320, bx = (b[0] - p[0]) * k, by = (b[1] - p[1]) * 111320;
