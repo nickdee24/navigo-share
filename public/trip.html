@@ -645,7 +645,7 @@
     try {
       map.queryRenderedFeatures({ layers: ids }).forEach(f => {
         const c = f.properties && f.properties.class;
-        if (/path|pedestrian|track|rail|aerialway|golf|ferry/.test(c || '')) return;
+        if (/path|pedestrian|track|rail|aerialway|golf|ferry|service/.test(c || '')) return;   // service = car parks, driveways
         const g = f.geometry; if (!g) return;
         if (g.type === 'LineString') lines.push(g.coordinates);
         else if (g.type === 'MultiLineString') g.coordinates.forEach(l => lines.push(l));
@@ -655,7 +655,7 @@
   }
   function snap(p, lines) {
     const k = 111320 * Math.cos(p[1] * Math.PI / 180);
-    let best = null, bestD = 30;
+    let best = null, bestD = 50;   // bus GPS can be well off, and the feed often reports from a layover spot beside the road
     for (const line of lines) for (let i = 0; i + 1 < line.length; i++) {
       const a = line[i], b = line[i + 1];
       const ax = (a[0] - p[0]) * k, ay = (a[1] - p[1]) * 111320, bx = (b[0] - p[0]) * k, by = (b[1] - p[1]) * 111320;
@@ -683,12 +683,13 @@
       const list = (await r.json()).sort((a, b) => metres([c.lng, c.lat], [a.lng, a.lat]) - metres([c.lng, c.lat], [b.lng, b.lat])).slice(0, 400);
       if (!busesOn) return;
       const z = map.getZoom(), size = z >= 16 ? 1.5 : z >= 15 ? 1.25 : z >= 14 ? 1.05 : z >= 12 ? 0.8 : z >= 10 ? 0.6 : 0.45, showNum = z >= 11;
-      const lines = z >= 13 ? roadLines() : [];
+      const lines = z >= 12 ? roadLines() : [];
       busLines = lines; busSize = size;
       const now = performance.now(), wall = Date.now(), seen = new Set();
       list.forEach(v => {
         const id = v.id || (v.line + v.dest); seen.add(id);
         const raw = [v.lng, v.lat], at = Math.min(v.at || wall, wall);
+        if (v.heading === 0) v.heading = null;   // 0 usually means "don't know" in the feed
         let o = buses.get(id);
         const sn = snap(raw, lines), pos = sn ? sn.p : raw;
         if (!o) {
@@ -712,6 +713,10 @@
           o.fix = pos; o.rawFix = raw; o.fixAt = at;
           o.from = o.shown; o.t0 = now;                          // ease from where it's drawn now onto the new track
           if (metres(o.shown, pos) > 1500) { o.from = pos; }
+        } else if (sn) {
+          // no new report, but the roads are on screen now (zoomed in / moved): put it on its road, facing along it
+          o.fix = pos;
+          o.heading = o.heading == null ? sn.road : (Math.abs(angDiff(sn.road, o.heading)) <= 90 ? sn.road : (sn.road + 180) % 360);
         }
         o.el.querySelector('b').textContent = showNum ? v.line : '';
         o.el.title = 'Bus ' + v.line + (v.dest ? ' to ' + v.dest : '');
