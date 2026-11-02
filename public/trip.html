@@ -135,12 +135,15 @@
     .me .busSign { position: absolute; left: 50%; top: 54px; transform: translateX(-50%); display: none; white-space: nowrap; text-align: center; }
     .me .busSign.show { display: block; cursor: pointer; pointer-events: auto; }
     .me .busSign .l1 { position: relative; display: inline-block; vertical-align: top; background: #111; color: #111; border: 2px solid #fff; border-radius: 7px;
-      padding: 2px 8px 1px; font-family: '7LED', ui-monospace, monospace; font-size: 17px; max-width: 150px; overflow: hidden; box-shadow: 0 2px 6px rgba(0,0,0,.6); }
+      padding: 2px 8px 1px; font-family: '7LED', ui-monospace, monospace; font-size: 17px; max-width: 170px; overflow: hidden; box-shadow: 0 2px 6px rgba(0,0,0,.6); }
     .me .busSign .l1::after { content: ''; position: absolute; inset: 0; pointer-events: none;
       background: repeating-linear-gradient(0deg, rgba(17,17,17,.35) 0 1px, transparent 1px 4px), repeating-linear-gradient(90deg, rgba(17,17,17,.35) 0 1px, transparent 1px 4px); }
     /* 7LED draws each letter as a lit block with the letter cut out, so the orange goes behind the text and the text is black */
-    .me .busSign .l1 span { display: inline-block; background: #FFB020; background-clip: content-box; }
-    .me .busSign .l1.scroll span { padding-left: 100%; animation: ledScroll var(--dur, 8s) linear infinite; }
+    .me .busSign .l1 span { display: inline-block; vertical-align: top; background: #FFB020; background-clip: content-box; }
+    /* the bus number stays put; only "to Wigan Bus Station" scrolls, like a bus ticker */
+    .me .busSign .l1 > span { margin-right: 6px; }
+    .me .busSign .l1 .dst { display: inline-block; vertical-align: top; overflow: hidden; max-width: 110px; }
+    .me .busSign .l1.scroll .dst span { padding-left: 100%; animation: ledScroll var(--dur, 8s) linear infinite; }
     @keyframes ledScroll { from { transform: translateX(0); } to { transform: translateX(-100%); } }
     .me .busSign .l2 { display: table; margin: 4px auto 0; background: #1B1F27; color: #E9EDF3; border-radius: 999px; padding: 3px 10px;
       font: 700 11px system-ui, sans-serif; box-shadow: 0 2px 6px rgba(0,0,0,.6); }
@@ -345,11 +348,11 @@
         else if (bus.stopsLeft != null) l2 += escH(bus.stopsLeft + (bus.stopsLeft === 1 ? ' stop left' : ' stops left'));
         if (bus.eta) l2 += (l2 ? '&nbsp;&nbsp; ' : '') + (late ? clock(bus.eta) : '<span class="ontime">' + clock(bus.eta) + '</span>') +
           (late ? ' <span class="lateBy">+' + bus.delayMin + '</span>' : '');
-        const h = '<div class="l1"><span>' + escH(top) + '</span></div>' + (l2 ? '<div class="l2">' + l2 + '</div>' : '');
+        const h = '<div class="l1"><span>' + escH(bus.service) + '</span>' + (dest ? '<div class="dst"><span>' + escH('to ' + dest) + '</span></div>' : '') + '</div>' + (l2 ? '<div class="l2">' + l2 + '</div>' : '');
         if (sign.dataset.h !== h) {
           sign.innerHTML = h; sign.dataset.h = h;
-          const l1 = sign.querySelector('.l1'), sp = l1.firstChild;
-          requestAnimationFrame(() => { if (sp.scrollWidth > l1.clientWidth + 2) { l1.classList.add('scroll'); l1.style.setProperty('--dur', Math.max(5, top.length * 0.35) + 's'); } });
+          const l1 = sign.querySelector('.l1'), box = l1.querySelector('.dst'), sp = box && box.firstChild;
+          if (sp) requestAnimationFrame(() => { if (sp.scrollWidth > box.clientWidth + 2) { l1.classList.add('scroll'); l1.style.setProperty('--dur', Math.max(5, top.length * 0.35) + 's'); } });
         }
       }
       if (busOpen) fillBusPanel(t);
