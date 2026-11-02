@@ -17,6 +17,13 @@
     html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
       font: 15px/1.35 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
     #map { position: fixed; inset: 0; background: #272E3A; }
+    /* Street View of where they are, facing the way they're going: the bottom quarter of the screen */
+    #sv { position: fixed; left: 0; right: 0; bottom: 0; height: 25vh; z-index: 999; display: none; background: #000; border-top: 2px solid #2C3038; }
+    #sv iframe { width: 100%; height: 100%; border: 0; display: block; }
+    body.sv #sv { display: block; }
+    body.sv #map { bottom: 25vh; }
+    body.sv #follow { bottom: calc(25vh + 22px); } body.sv #busesBtn { bottom: calc(25vh + 82px); }
+    body.sv #busesTip { bottom: calc(25vh + 92px); } body.sv #brand { bottom: calc(25vh + 26px); }
     .mapboxgl-ctrl-attrib { background: rgba(13,15,18,.7) !important; }
     .dark-tiles { filter: invert(1) hue-rotate(180deg) brightness(.85) contrast(.9) saturate(.4); }
 
@@ -185,6 +192,7 @@
 </head>
 <body>
   <div id="map"></div>
+  <div id="sv"></div>
 
   <div id="card">
     <!-- 1. live: when the location last came in, and the speed -->
@@ -568,7 +576,7 @@
       $('msg').classList.remove('show');
       if (!data.endedAt && wasEnded) first = true;   // a new trip on the same link: zoom to it again
       wasEnded = !!data.endedAt;
-      drawRoute(data); drawMe(data);
+      drawRoute(data); drawMe(data); streetView(data);
       if (follow || first) centre(true);
       render();
     } catch (e) {
@@ -576,6 +584,23 @@
       $('dot').className = 'dot stale';
     }
     setTimeout(poll, data && data.endedAt ? 10000 : 4000);
+  }
+  // ---------- Street View strip: where they are, facing the way they're going (Google Maps Embed API) ----------
+  let svAt = null, svHd = null, svT = 0;
+  function streetView(d) {
+    const on = !!window.GMAPS_KEY && d && d.lat != null && !d.endedAt;
+    if (document.body.classList.contains('sv') !== on) { document.body.classList.toggle('sv', on); setTimeout(() => map.resize && map.resize(), 50); }
+    if (!on) return;
+    const p = [d.lng, d.lat], hd = d.heading != null ? Math.round(d.heading) : (svHd || 0), now = Date.now();
+    // only reload the picture when they've moved a bit or turned (each new view is a fresh load)
+    const moved = !svAt || metres(svAt, p) > 25, turned = svHd == null || Math.abs(((hd - svHd + 540) % 360) - 180) > 30;
+    if (!(moved || turned) || now - svT < 6000) return;
+    svAt = p; svHd = hd; svT = now;
+    const u = 'https://www.google.com/maps/embed/v1/streetview?key=' + encodeURIComponent(window.GMAPS_KEY) +
+      '&location=' + d.lat.toFixed(6) + ',' + d.lng.toFixed(6) + '&heading=' + hd + '&pitch=0&fov=90';
+    const box = $('sv'); let f = box.querySelector('iframe');
+    if (!f) { f = document.createElement('iframe'); f.loading = 'lazy'; f.referrerPolicy = 'no-referrer-when-downgrade'; f.allowFullscreen = true; box.appendChild(f); }
+    f.src = u;
   }
   // ---------- live buses on the map (toggle remembered on this device) ----------
   let busesOn = true;

@@ -11,6 +11,8 @@ const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'data');
 const PUBLIC_DIR = path.join(__dirname, 'public');
 // Mapbox public token for the map (set MAPBOX_TOKEN in Render → Environment). Without it the page uses OpenStreetMap.
 const MAPBOX_TOKEN = process.env.MAPBOX_TOKEN || '';
+// Google Maps key for the Street View strip (Maps Embed API, free to use). Set GOOGLE_MAPS_KEY in Render → Environment.
+const GOOGLE_MAPS_KEY = process.env.GOOGLE_MAPS_KEY || '';
 fs.mkdirSync(DATA_DIR, { recursive: true });
 
 // ---------- storage (a JSON file; on Render's free plan it's wiped on restart and the phone recreates it) ----------
@@ -276,7 +278,7 @@ const server = http.createServer(async (req, res) => {
   }
   if (url.pathname === '/config.js') {
     res.writeHead(200, { 'Content-Type': MIME['.js'], 'Cache-Control': 'no-cache' });
-    return res.end('window.MAPBOX_TOKEN = ' + JSON.stringify(MAPBOX_TOKEN) + ';');
+    return res.end('window.MAPBOX_TOKEN = ' + JSON.stringify(MAPBOX_TOKEN) + ';window.GMAPS_KEY = ' + JSON.stringify(GOOGLE_MAPS_KEY) + ';');
   }
   if (url.pathname === '/api/buses') {
     const p = k => +url.searchParams.get(k);
