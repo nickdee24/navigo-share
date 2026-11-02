@@ -346,7 +346,7 @@
         // like the app: top line "375 to Wigan Bus Station" (scrolls when it's too long), then stops left and arrival
         // time (green on time / orange with red +minutes late)
         const late = (bus.delayMin || 0) >= 2;
-        const dest = bus.destination || (bus.heading || '').replace(/^to /, '');
+        const dest = bus.getOff || bus.destination || (bus.heading || '').replace(/^to /, '');   // their chosen stop, if they picked one
         const top = bus.service + (dest ? ' to ' + dest : '');
         let l2 = '';
         if (bus.stopNo > 0 && bus.stopOf > 0) l2 += escH('Stop ' + bus.stopNo + ' of ' + bus.stopOf);
