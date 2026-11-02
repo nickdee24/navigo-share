@@ -70,7 +70,7 @@ function endShare(t, arrived) {
 setInterval(pruneShares, 10 * 60000);
 const num = v => (v == null || v === '' || !isFinite(+v) ? null : +v);
 function publicShare(t) {
-  return { name: t.name, mood: t.mood, hasPhoto: !!t.photo, photoV: t.photoV || 0, lat: t.lat, lng: t.lng, heading: t.heading,
+  return { name: t.name, mood: t.mood, emoji: t.emoji, hasPhoto: !!t.photo, photoV: t.photoV || 0, lat: t.lat, lng: t.lng, heading: t.heading,
     speed: t.speed, place: t.place || null, music: t.music || null,
     radio: t.radio ? Object.assign({ hasLogo: !!t.radioLogo, logoV: t.radioLogoV || 0 }, t.radio) : null,
     mode: t.mode || 'car', activity: t.activity || null, bus: t.bus || null, dest: t.dest, eta: t.eta, remainingM: t.remainingM, route: t.route, routeV: t.routeV || 0, lastDest: t.lastDest || null,
@@ -93,6 +93,7 @@ async function handleShareApi(req, res, action) {
   if (t.endedAt) { t.startedAt = Date.now(); t.endedAt = null; t.arrived = false; t.photoV = (t.photoV || 0) + 1; }
   t.name = String(b.name || 'Someone').slice(0, 30);
   t.mood = String(b.mood || '').slice(0, 16);
+  t.emoji = String(b.emoji || '').slice(0, 16);   // the profile emoji the app shows when there's no mood
   // What you're listening to (Spotify / YouTube Music), shown above your icon. null = nothing playing.
   if (b.music && b.music.title) {
     t.music = { title: String(b.music.title).slice(0, 80), artist: String(b.music.artist || '').slice(0, 60),

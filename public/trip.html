@@ -170,6 +170,7 @@
     .me.onbus .arrow { display: none !important; }
     .me.onbus .face { inset: auto; left: 8px; top: -138px; width: 40px; height: 40px; font-size: 22px; border-width: 2px; }
     .me.onbus .busSign { top: -94px; }
+    .me.onbus.nosign .face { top: -52px; }
     .me.onbus .np { bottom: 152px; }
     .ontime { color: #3DDC84; } .lateTime { color: #FFB020; } .lateBy { color: #FF4D4D; }
     .me .face { cursor: pointer; }
@@ -317,7 +318,7 @@
 
   function faceHtml(t) {
     if (t.hasPhoto) return '<img src="/api/share/' + id + '/photo?v=' + t.photoV + '" alt="">';
-    return t.mood || '🚗';
+    return t.mood || t.emoji || '🙂';   // same as the app: mood, else the profile emoji
   }
   // Where the song is now: its position when the phone last sent it, plus the time since (while playing)
   const mmss = ms => { const s = Math.max(0, Math.floor(ms / 1000)); return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0'); };
@@ -346,7 +347,8 @@
       el.addEventListener('click', e => { if (data && data.mode === 'bus' && data.bus) { e.stopPropagation(); busOpen = !busOpen; fillBusPanel(data); } });
       photoV = -1;
     }
-    if (photoV !== t.photoV) { photoV = t.photoV; me.getElement().querySelector('.face').innerHTML = faceHtml(t); }
+    const faceKey = t.photoV + '|' + (t.hasPhoto ? '' : (t.mood || t.emoji || ''));
+    if (photoV !== faceKey) { photoV = faceKey; me.getElement().querySelector('.face').innerHTML = faceHtml(t); }
     me.setLngLat(ll);
     const el = me.getElement();
     if (el) {
@@ -361,6 +363,7 @@
       el.querySelector('.me').classList.toggle('onbus', t.mode === 'bus');
       if (t.heading != null) el.querySelector('.busIcon').style.transform = 'rotate(' + t.heading + 'deg)';
       sign.classList.toggle('show', !!bus);
+      el.querySelector('.me').classList.toggle('nosign', !bus);   // no bus picked yet: the face sits just above the bus
       if (bus) {
         // like the app: top line "375 to Wigan Bus Station" (scrolls when it's too long), then stops left and arrival
         // time (green on time / orange with red +minutes late)
