@@ -572,9 +572,7 @@
   let busMarks = [], busTimer = null;
   const miniBus = '<img src="/bus_top.png" alt="">';
   function tip(text) { const t = $('busesTip'); t.textContent = text; t.style.display = 'block'; clearTimeout(tip.h); tip.h = setTimeout(() => t.style.display = 'none', 2500); }
-  // Buses only report where they are every 10-30 s, and the report is already a few seconds old when it arrives.
-  // So between reports each bus keeps driving: from its last report, at the speed it's been doing, along the road,
-  // and when a new report comes in it eases onto it. That way they move all the time instead of jumping every 10 s.
+  // Buses jump straight to each new reported spot (Nick prefers that to gliding). Checked every 5 s.
   const BUS_POLL = 5000;
   let busLines = [], busSize = 1;
   const buses = new Map();   // id -> { m, el, svg, from, to, t0, heading, raw }
@@ -737,27 +735,10 @@
   (function glide() {
     const now = performance.now();
     update3d(now); declutter(false);
-    const wall = Date.now(), doSnap = now - (glide.snapAt || 0) > 200;
-    if (doSnap) glide.snapAt = now;
     buses.forEach(o => {
-      // where it should be by now: driven on from its last report (for up to 40 s; after that it's probably stopped)
-      const secs = Math.max(0, Math.min(40, (wall - o.fixAt) / 1000));
-      let pred = o.fix, hd = o.heading;
-      if (o.speed > 0.5 && hd != null) {
-        const dist = o.speed * secs, r = hd * Math.PI / 180;
-        pred = [o.fix[0] + dist * Math.sin(r) / (111320 * Math.cos(o.fix[1] * Math.PI / 180)), o.fix[1] + dist * Math.cos(r) / 111320];
-        if (busLines.length) {
-          if (doSnap || !o.snapPred) { const sn = snap(pred, busLines); o.snapPred = sn ? { p: sn.p, road: sn.road, from: pred } : null; }
-          if (o.snapPred && metres(o.snapPred.from, pred) < 15) {
-            pred = [pred[0] + o.snapPred.p[0] - o.snapPred.from[0], pred[1] + o.snapPred.p[1] - o.snapPred.from[1]];
-            hd = Math.abs(angDiff(o.snapPred.road, hd)) <= 90 ? o.snapPred.road : (o.snapPred.road + 180) % 360;
-          }
-        }
-      }
-      const k = Math.min(1, (now - o.t0) / 1500);
-      const p = k >= 1 ? pred : [o.from[0] + (pred[0] - o.from[0]) * k, o.from[1] + (pred[1] - o.from[1]) * k];
-      o.shown = p; o.m.setLngLat(p);
-      const rot = Math.round(hd || 0);
+      // straight to the latest reported spot (no gliding: easing across the map cuts through buildings)
+      if (o.shown !== o.fix) { o.shown = o.fix; o.m.setLngLat(o.fix); }
+      const rot = Math.round(o.heading || 0);
       if (rot !== o.rot) { o.rot = rot; o.svg.style.transform = 'rotate(' + rot + 'deg) scale(' + busSize + ')'; }
     });
     requestAnimationFrame(glide);
