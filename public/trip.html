@@ -129,7 +129,7 @@
     .np .st { flex: none; font-size: 10px; color: var(--green); }
     .np .st.paused { color: var(--muted); }
     .np .txt { white-space: normal; overflow-wrap: anywhere; line-height: 1.3; }
-    @font-face { font-family: 'DotMatrix'; src: url('/dotmatrix.ttf') format('truetype'); font-display: swap; }   /* DotGothic16 (Google Fonts, OFL), English letters only */
+    @font-face { font-family: 'DotMatrix'; src: url('/dotmatrix.ttf') format('truetype'); font-display: swap; }   /* Doto bold (Google Fonts, OFL), English letters only */
     @font-face { font-family: '7LED'; src: url('/7LED.ttf') format('truetype'); font-display: swap; }
     /* the bus sign: like the orange LED display on the front of a bus (Nick's 7LED font, little-dots look), then a separate
        banner under it like the app's "Pick your bus" pill: "Stop 4 of 18  16:29" with a red +minutes when late */
@@ -145,7 +145,7 @@
     .me .busSign .l1 > span { margin-right: 6px; }
     .me .busSign .l1 .dst { display: inline-block; vertical-align: top; overflow: hidden; max-width: 120px; }
     /* destination words in a dot-matrix font (7LED mixes capitals and small letters), plain orange on black */
-    .me .busSign .l1 .dst span { font-family: 'DotMatrix', ui-monospace, monospace; font-size: 15px; line-height: 21px; color: #FFB020; background: none; }
+    .me .busSign .l1 .dst span { font-family: 'DotMatrix', ui-monospace, monospace; font-size: 16px; font-weight: 700; line-height: 21px; color: #FFB020; background: none; }
     .me .busSign .l1.scroll .dst span { padding-left: 100%; animation: ledScroll var(--dur, 8s) linear infinite; }
     @keyframes ledScroll { from { transform: translateX(0); } to { transform: translateX(-100%); } }
     .me .busSign .l2 { display: table; margin: 4px auto 0; background: #1B1F27; color: #E9EDF3; border-radius: 999px; padding: 3px 10px;
@@ -353,7 +353,7 @@
         else if (bus.stopsLeft != null) l2 += escH(bus.stopsLeft + (bus.stopsLeft === 1 ? ' stop left' : ' stops left'));
         if (bus.eta) l2 += (l2 ? '&nbsp;&nbsp; ' : '') + (late ? clock(bus.eta) : '<span class="ontime">' + clock(bus.eta) + '</span>') +
           (late ? ' <span class="lateBy">+' + bus.delayMin + '</span>' : '');
-        const h = '<div class="l1"><span>' + escH(bus.service) + '</span>' + (dest ? '<div class="dst"><span>' + escH('to ' + titleCase(dest)) + '</span></div>' : '') + '</div>' + (l2 ? '<div class="l2">' + l2 + '</div>' : '');
+        const h = '<div class="l1"><span>' + escH(bus.service) + '</span>' + (dest ? '<div class="dst"><span>' + escH(titleCase(dest)) + '</span></div>' : '') + '</div>' + (l2 ? '<div class="l2">' + l2 + '</div>' : '');
         if (sign.dataset.h !== h) {
           sign.innerHTML = h; sign.dataset.h = h;
           const l1 = sign.querySelector('.l1'), box = l1.querySelector('.dst'), sp = box && box.firstChild;
