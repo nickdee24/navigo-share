@@ -93,10 +93,9 @@
     #busesTip { position: fixed; right: 72px; bottom: calc(92px + env(safe-area-inset-bottom)); z-index: 1000; font-size: 12px; color: var(--text);
       background: rgba(23,26,31,.94); border: 1px solid var(--border); border-radius: 10px; padding: 5px 9px; display: none; }
     .lbus { position: relative; width: 16px; height: 36px; pointer-events: auto; cursor: pointer; }
-    .lbus.in3d img { opacity: 0; }   /* zoomed in: drawn in 3D */
     .lbus img { position: absolute; left: 3px; top: 0; width: 10px; height: 36px; transition: transform .8s; filter: drop-shadow(0 1px 2px rgba(0,0,0,.6)); }
     .lbus svg { position: absolute; inset: 0; transition: transform .8s; filter: drop-shadow(0 1px 2px rgba(0,0,0,.6)); }
-    .lbus b { position: absolute; left: 50%; bottom: 34px; transform: translateX(-50%); font: 800 11px ui-monospace, Menlo, monospace; color: #FFB020;
+    .lbus b { position: absolute; left: 50%; bottom: calc(50% + var(--lift, 22px)); transform: translate(-50%, var(--dy, 0px)); transition: transform .3s; font: 800 11px ui-monospace, Menlo, monospace; color: #FFB020;
       background: #111; border-radius: 4px; padding: 0 3px; white-space: nowrap; }
     #brand { position: fixed; left: 14px; bottom: calc(26px + env(safe-area-inset-bottom)); z-index: 1000;
       font-size: 12px; color: var(--muted); background: rgba(23,26,31,.85); padding: 5px 10px; border-radius: 20px; }
@@ -631,7 +630,7 @@
       if (!r.ok) return;
       const list = (await r.json()).sort((a, b) => metres([c.lng, c.lat], [a.lng, a.lat]) - metres([c.lng, c.lat], [b.lng, b.lat])).slice(0, 400);
       if (!busesOn) return;
-      const z = map.getZoom(), size = z >= 14 ? 1 : z >= 12 ? 0.8 : z >= 10 ? 0.6 : 0.45, showNum = z >= 11;
+      const z = map.getZoom(), size = z >= 16 ? 1.5 : z >= 15 ? 1.25 : z >= 14 ? 1.05 : z >= 12 ? 0.8 : z >= 10 ? 0.6 : 0.45, showNum = z >= 11;
       const lines = z >= 13 ? roadLines() : [];
       const now = performance.now(), seen = new Set();
       list.forEach(v => {
@@ -656,8 +655,10 @@
         o.el.querySelector('b').textContent = showNum ? v.line : '';
         o.el.title = 'Bus ' + v.line + (v.dest ? ' to ' + v.dest : '');
         o.svg.style.transform = 'rotate(' + (heading || 0) + 'deg) scale(' + size + ')';
-        o.line = v.line; o.el.classList.toggle('in3d', z >= BUS3D_ZOOM);
+        o.el.style.setProperty('--lift', Math.round(18 * size + 3) + 'px');   // number sits just above the bus whichever way it faces
+        o.line = v.line;
       });
+      declutter(true);
       buses.forEach((o, id) => { if (!seen.has(id)) { o.m.remove(); buses.delete(id); } });
       hideMyBusTwin();
     } catch (e) { /* try again next time */ }
@@ -691,15 +692,39 @@
     const src = map.getSource('live-bus-3d'); if (!src || !src.setData) return;
     const on = map.getZoom() >= BUS3D_ZOOM, feats = [];
     if (on) {
-      buses.forEach(o => { if (!o.twin) feats.push({ type: 'Feature', properties: { rot: [0, 0, (o.heading || 0) - 90] }, geometry: { type: 'Point', coordinates: o.m.getLngLat().toArray() } }); });
+      // other buses stay as flat top-down icons with their number (the 3D ones drifted off their spot and hid the numbers)
       const r = myRide(); if (r && me) feats.push({ type: 'Feature', properties: { rot: [0, 0, (r.heading || 0) - 90] }, geometry: { type: 'Point', coordinates: me.getLngLat().toArray() } });
     }
     const meEl = me && me.getElement().querySelector('.me'); if (meEl) meEl.classList.toggle('bus3d', on && !!myRide());
     src.setData({ type: 'FeatureCollection', features: feats });
   }
+  // Buses close together (two at the same stop): stack their numbers so they don't sit on top of each other
+  let lastDeclutter = 0;
+  function declutter(force) {
+    const now = performance.now();
+    if (!force && now - lastDeclutter < 300) return; lastDeclutter = now;
+    const items = [];
+    buses.forEach(o => {
+      if (o.twin || !o.el.querySelector('b').textContent) { o.el.style.setProperty('--dy', '0px'); return; }
+      const pt = map.project(o.m.getLngLat()); const lift = parseFloat(o.el.style.getPropertyValue('--lift')) || 22;
+      items.push({ o, x: pt.x, y: pt.y - lift });
+    });
+    items.sort((a, b) => b.y - a.y);
+    const placed = [];
+    items.forEach(it => {
+      let dy = 0;
+      for (let k = 0; k < 5; k++) {
+        const y = it.y + dy;
+        if (!placed.some(p => Math.abs(p.x - it.x) < 30 && Math.abs(p.y - y) < 15)) break;
+        dy -= 15;
+      }
+      placed.push({ x: it.x, y: it.y + dy });
+      it.o.el.style.setProperty('--dy', dy + 'px');
+    });
+  }
   (function glide() {
     const now = performance.now();
-    update3d(now);
+    update3d(now); declutter(false);
     buses.forEach(o => {
       if (o.from === o.to) return;
       const t = Math.min(1, (now - o.t0) / BUS_POLL);
