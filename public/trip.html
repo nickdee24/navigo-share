@@ -104,6 +104,13 @@
     .lbus svg { position: absolute; inset: 0; transition: transform .8s; filter: drop-shadow(0 1px 2px rgba(0,0,0,.6)); }
     .lbus b { position: absolute; left: 50%; bottom: calc(50% + var(--lift, 22px)); transform: translate(-50%, var(--dy, 0px)); transition: transform .3s; font: 800 11px ui-monospace, Menlo, monospace; color: #FFB020;
       background: #111; border-radius: 4px; padding: 0 3px; white-space: nowrap; }
+    /* their speed: the same round dial as the app's (dark, dotted ring, big number, mph) */
+    #speedo { position: fixed; left: 14px; bottom: calc(64px + env(safe-area-inset-bottom)); z-index: 1000; width: 76px; height: 76px; border-radius: 50%;
+      background: rgba(26,29,35,.9); box-shadow: 0 4px 10px rgba(0,0,0,.5); display: none; flex-direction: column; align-items: center; justify-content: center; color: #EEE; }
+    #speedo.show { display: flex; }
+    #speedo svg { position: absolute; inset: 0; }
+    #speedo b { font: 700 28px/1 system-ui, sans-serif; } #speedo i { font: 400 11px/1 system-ui, sans-serif; font-style: normal; opacity: .8; margin-top: 2px; }
+    body.sv #speedo { bottom: calc(25vh + 64px); }
     #brand { position: fixed; left: 14px; bottom: calc(26px + env(safe-area-inset-bottom)); z-index: 1000;
       font-size: 12px; color: var(--muted); background: rgba(23,26,31,.85); padding: 5px 10px; border-radius: 20px; }
     #brand b { color: var(--accent); }
@@ -231,6 +238,7 @@
   <div id="busesTip"></div>
   <button id="follow" class="on" title="Follow">◎</button>
   <div id="brand">Shared from <b>NaviGO</b></div>
+  <div id="speedo"><svg viewBox="0 0 76 76"><circle cx="38" cy="38" r="34.5" fill="none" stroke="rgba(238,238,238,.6)" stroke-width="2" stroke-dasharray="4 6"/></svg><b>0</b><i>mph</i></div>
 
   <div id="msg"><div class="box"><div style="font-size:36px" id="msgIcon">🔗</div><h2 id="msgTitle"></h2><p id="msgText"></p></div></div>
 
@@ -544,8 +552,11 @@
     if (t.endedAt) s = (t.arrived ? '🏁 Arrived ' : 'Stopped sharing ') + ago(Date.now() - t.endedAt) + ' · this page updates by itself when they share again';
     else if (t.lat == null) s = 'Waiting for their location…';
     else s = (age < 45000 ? 'Live · ' : 'Signal lost · ') + 'location updated ' + ago(age);
-    if (!t.endedAt && t.speed != null && age < 45000) s += ' · ' + Math.round(t.speed * 2.23694) + ' mph';
     $('statusText').textContent = s;
+    // speed in the round dial like the app's (not in the text)
+    const live = !t.endedAt && t.speed != null && age < 45000;
+    $('speedo').classList.toggle('show', live);
+    if (live) $('speedo').querySelector('b').textContent = Math.round(t.speed * 2.23694);
     if (t.endedAt) {
       $('actText').textContent = t.arrived ? 'Arrived' : 'Not sharing right now';
       $('actIcon').className = ''; $('actIcon').innerHTML = t.arrived ? '🏁' : '🔒';
