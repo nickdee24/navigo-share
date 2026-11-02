@@ -606,7 +606,11 @@
   let busesOn = true;
   try { busesOn = localStorage.getItem('navigoBuses') !== 'off'; } catch (e) {}
   let busMarks = [], busTimer = null;
-  const miniBus = '<svg class="bi" viewBox="0 0 16 36"><rect x=".8" y=".8" width="14.4" height="34.4" rx="3.5" fill="#00A9A4" stroke="#fff" stroke-width="1.4"/><rect x="3" y="7" width="10" height="26" rx="2" fill="#F4F2EA"/><path d="M3 23 13 18.5v2.5L3 25.5Z" fill="#00A9A4"/><rect x="2.5" y="2.5" width="11" height="4" rx="1.5" fill="#20303A"/></svg>';
+  // exactly the same drawing as your own bus (just smaller)
+  const miniBus = '<svg class="bi" viewBox="0 0 30 72"><rect x="1" y="1" width="28" height="70" rx="6" fill="#00A9A4" stroke="#fff" stroke-width="2.6"/>' +
+    '<rect x="5" y="13" width="20" height="53" rx="3" fill="#F4F2EA"/><path d="M5 45 25 36v5L5 50Z" fill="#00A9A4"/>' +
+    '<rect x="4" y="4" width="22" height="8" rx="3" fill="#20303A"/><rect x="10" y="22" width="10" height="4" rx="2" fill="#C9D3D8"/>' +
+    '<rect x="10" y="56" width="10" height="4" rx="2" fill="#C9D3D8"/></svg>';
   function tip(text) { const t = $('busesTip'); t.textContent = text; t.style.display = 'block'; clearTimeout(tip.h); tip.h = setTimeout(() => t.style.display = 'none', 2500); }
   // Buses jump straight to each new reported spot (Nick prefers that to gliding). Checked every 5 s.
   const BUS_POLL = 5000;
