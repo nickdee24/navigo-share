@@ -371,7 +371,7 @@
         const dest = bus.getOff || bus.destination || (bus.heading || '').replace(/^to /, '');   // their chosen stop, if they picked one
         const top = bus.service + (dest ? ' to ' + dest : '');
         let l2 = '';
-        if (bus.stopNo > 0 && bus.stopOf > 0) l2 += escH('Stop ' + bus.stopNo + ' of ' + bus.stopOf);
+        if (bus.stopNo > 0 && bus.stopOf > 0) { const away = bus.stopOf - bus.stopNo + 1; l2 += escH(away === 1 ? '1 stop away' : away + ' stops away'); }
         else if (bus.stopsLeft != null) l2 += escH(bus.stopsLeft + (bus.stopsLeft === 1 ? ' stop left' : ' stops left'));
         if (bus.eta) l2 += (l2 ? '&nbsp;&nbsp; ' : '') + (late ? clock(bus.eta) : '<span class="ontime">' + clock(bus.eta) + '</span>') +
           (late ? ' <span class="lateBy">+' + bus.delayMin + '</span>' : '');
@@ -572,7 +572,8 @@
 
   async function poll() {
     try {
-      const r = await fetch('/api/share/' + id, { cache: 'no-store' });
+      // w=1: this page is on screen right now, so the app can show an eye (someone's watching)
+      const r = await fetch('/api/share/' + id + (document.visibilityState === 'visible' ? '?w=1' : ''), { cache: 'no-store' });
       if (r.status === 404) {
         showMsg('🔗', 'Nothing shared yet', "Nobody is sharing a trip on this link right now. This page will update by itself when they do.");
         $('actText').textContent = 'Not sharing right now'; $('to').textContent = ''; $('stats').style.display = 'none';

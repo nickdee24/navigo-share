@@ -138,7 +138,9 @@ async function handleShareApi(req, res, action) {
   if (b.photo === null) t.photo = null;
   save();
   return json(res, 200, { ok: true, url: '/t/' + id, needRoute: !!(t.dest && !t.route), needPhoto: !!b.wantPhoto && !t.photo,
-    needRadioLogo: !!(t.radio && !t.radioLogo) });
+    needRadioLogo: !!(t.radio && !t.radioLogo),
+    // someone has the share page open and on screen right now (the app shows an eye above your mood)
+    watching: !!(t.watchedAt && Date.now() - t.watchedAt < 15000) });
 }
 
 // ---------- where you are: street and town (OpenStreetMap's Nominatim, at most 1 lookup a second, cached) ----------
@@ -293,6 +295,7 @@ const server = http.createServer(async (req, res) => {
   const shareGet = url.pathname.match(/^\/api\/share\/([A-Za-z0-9]{8,16})$/);
   if (shareGet) {
     const t = db.shares[shareGet[1]];
+    if (t && url.searchParams.get('w') === '1') t.watchedAt = Date.now();   // a viewer has the page on screen (kept in memory only)
     return t ? json(res, 200, publicShare(t)) : json(res, 404, { error: 'Nothing shared on this link yet.' });
   }
   const sharePhoto = url.pathname.match(/^\/api\/share\/([A-Za-z0-9]{8,16})\/photo$/);
