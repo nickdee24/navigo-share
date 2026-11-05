@@ -132,6 +132,11 @@
       border-left: 8px solid transparent; border-right: 8px solid transparent; border-bottom: 11px solid var(--accent);
       filter: drop-shadow(0 0 1.5px #fff); }
     .me.old .face { filter: grayscale(.8); opacity: .75; }
+    /* how they're travelling, in a little badge under the face (on a bus the drawn bus shows instead) */
+    .me .mode { position: absolute; left: 50%; top: 46px; transform: translateX(-50%); width: 26px; height: 26px; border-radius: 50%;
+      background: #1D2127; border: 2px solid #fff; display: flex; align-items: center; justify-content: center; font-size: 15px;
+      box-shadow: 0 2px 6px rgba(0,0,0,.6); }
+    .me .mode:empty, .me.onbus .mode { display: none; }
     /* now playing, above the icon */
     .np { position: absolute; left: 50%; bottom: 60px; transform: translateX(-50%); display: none; align-items: center; gap: 6px;
       width: max-content; max-width: min(340px, 80vw); padding: 4px 9px 4px 5px; border-radius: 14px; background: rgba(23,26,31,.95); border: 1px solid var(--border);
@@ -317,8 +322,10 @@
   function showMsg(icon, title, text) { $('msgIcon').textContent = icon; $('msgTitle').textContent = title; $('msgText').textContent = text; $('msg').classList.add('show'); }
 
   function faceHtml(t) {
+    // Nick: a mood takes over; otherwise their profile picture; otherwise their profile emoji
+    if (t.mood) return escH(t.mood);
     if (t.hasPhoto) return '<img src="/api/share/' + id + '/photo?v=' + t.photoV + '" alt="">';
-    return t.mood || t.emoji || '🙂';   // same as the app: mood, else the profile emoji
+    return escH(t.emoji || '🙂');
   }
   // Where the song is now: its position when the phone last sent it, plus the time since (while playing)
   const mmss = ms => { const s = Math.max(0, Math.floor(ms / 1000)); return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0'); };
@@ -336,7 +343,7 @@
     if (!me) {
       const el = document.createElement('div'); el.style.zIndex = 5;
       el.innerHTML = '<div class="me"><div class="np"><span class="tag"></span><span class="st"></span><span class="txt"></span><span class="time"></span></div>' +
-        '<div class="arrow"></div><div class="face"></div><div class="busSign"></div>' +
+        '<div class="arrow"></div><div class="face"></div><div class="mode"></div><div class="busSign"></div>' +
         // the drawn bus Nick prefers (aquamarine, white roof, swoosh), not the Arriva picture
         '<svg class="busIcon" viewBox="0 0 30 72"><rect x="1" y="1" width="28" height="70" rx="6" fill="#00A9A4" stroke="#fff" stroke-width="2"/>' +
         '<rect x="5" y="13" width="20" height="53" rx="3" fill="#F4F2EA"/><path d="M5 45 25 36v5L5 50Z" fill="#00A9A4"/>' +
@@ -347,7 +354,7 @@
       el.addEventListener('click', e => { if (data && data.mode === 'bus' && data.bus) { e.stopPropagation(); busOpen = !busOpen; fillBusPanel(data); } });
       photoV = -1;
     }
-    const faceKey = t.photoV + '|' + (t.hasPhoto ? '' : (t.mood || t.emoji || ''));
+    const faceKey = (t.mood ? 'm' + t.mood : t.hasPhoto ? 'p' + t.photoV : 'e' + (t.emoji || ''));
     if (photoV !== faceKey) { photoV = faceKey; me.getElement().querySelector('.face').innerHTML = faceHtml(t); }
     me.setLngLat(ll);
     const el = me.getElement();
@@ -361,6 +368,8 @@
       // on the bus: the bus number under the face
       const sign = el.querySelector('.busSign'), bus = t.mode === 'bus' && t.bus;
       el.querySelector('.me').classList.toggle('onbus', t.mode === 'bus');
+      const mi = t.mode === 'walk' ? '🚶' : t.mode === 'bus' ? '' : '🚗';
+      if (el.querySelector('.mode').textContent !== mi) el.querySelector('.mode').textContent = mi;
       if (t.heading != null) el.querySelector('.busIcon').style.transform = 'rotate(' + t.heading + 'deg)';
       sign.classList.toggle('show', !!bus);
       el.querySelector('.me').classList.toggle('nosign', !bus);   // no bus picked yet: the face sits just above the bus
