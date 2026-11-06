@@ -669,10 +669,16 @@
     const ids = (map.getStyle().layers || []).map(l => l.id).filter(id => /^(road|bridge|tunnel)/.test(id) && !skip.test(id));
     if (!ids.length) return [];
     const lines = []; lines.major = [];   // major: A/B roads and the like (motorway..tertiary)
+    // every road in the loaded map tiles (not just what's drawn on screen this instant): the screen-only query came back
+    // half empty while the map was still moving or loading, and those buses were left off the road
+    const src = (map.getStyle().layers || []).find(l => l['source-layer'] === 'road');
+    let feats = [];
+    try { if (src && map.querySourceFeatures) feats = map.querySourceFeatures(src.source, { sourceLayer: 'road' }); } catch (e) {}
+    if (!feats.length) try { feats = map.queryRenderedFeatures({ layers: ids }); } catch (e) {}
     try {
-      map.queryRenderedFeatures({ layers: ids }).forEach(f => {
+      feats.forEach(f => {
         const c = f.properties && f.properties.class;
-        if (/path|pedestrian|track|rail|aerialway|golf|ferry|service/.test(c || '')) return;   // service = car parks, driveways
+        if (/path|pedestrian|track|rail|aerialway|golf|ferry|service|construction/.test(c || '')) return;   // service = car parks, driveways
         const g = f.geometry; if (!g) return;
         const add = l => { lines.push(l); if (/^(motorway|trunk|primary|secondary|tertiary)/.test(c || '')) lines.major.push(l); };
         if (g.type === 'LineString') add(g.coordinates);
@@ -844,6 +850,13 @@
     tip(busesOn ? 'Live buses on' : 'Live buses off');
     loadBuses();
   };
+  // when the map has finished loading its roads, put every bus back on its road (no new fetch needed)
+  map.on('idle', () => {
+    if (!busesOn || !busMode() || !buses.size || map.getZoom() < 12) return;
+    const lines = roadLines(); if (!lines.length) return; busLines = lines;
+    buses.forEach(o => { const sn = snap(o.rawFix, lines); if (!sn) return;
+      o.fix = sn.p; o.heading = o.heading == null ? sn.road : (Math.abs(angDiff(sn.road, o.heading)) <= 90 ? sn.road : (sn.road + 180) % 360); });
+  });
   map.on('moveend', () => { if (busesOn && busMode()) { clearTimeout(loadBuses.d); loadBuses.d = setTimeout(loadBuses, 600); } });
   setTimeout(loadBuses, 3000);
 
