@@ -602,7 +602,9 @@
         return setTimeout(poll, 15000);
       }
       if (!r.ok) throw new Error(r.status);
+      const wasBus = busMode();
       data = await r.json();
+      if (busMode() !== wasBus) { $('busesBtn').style.display = busMode() ? '' : 'none'; setTimeout(loadBuses, 0); }
       // clock difference between this device and the server, so "updated x ago" is right
       const skew = Date.now() - data.now;
       ['updatedAt', 'endedAt', 'startedAt', 'eta'].forEach(k => { if (data[k]) data[k] += skew; });
@@ -651,6 +653,7 @@
   const BUS_POLL = 5000;
   let busLines = [], busSize = 1;
   const buses = new Map();   // id -> { m, el, svg, from, to, t0, heading, raw }
+  function busMode() { return !!(data && data.mode === 'bus' && !data.endedAt); }
   function clearBuses() { buses.forEach(b => b.m.remove()); buses.clear(); }
   const bearing = (a, b) => {
     const r = Math.PI / 180, y = Math.sin((b[0] - a[0]) * r) * Math.cos(b[1] * r),
@@ -699,7 +702,8 @@
   }
   async function loadBuses() {
     clearTimeout(busTimer);
-    if (!busesOn) { clearBuses(); return; }
+    // live buses only while Nick is in bus mode (like the app): none in car or walking mode
+    if (!busesOn || !busMode()) { clearBuses(); return; }
     busTimer = setTimeout(loadBuses, BUS_POLL);
     if (!map.getBounds) return;
     // on a bus: they are the bus, and the other buses are hidden until they get off (like the app)
@@ -832,6 +836,7 @@
     requestAnimationFrame(glide);
   })();
   $('busesBtn').classList.toggle('on', busesOn);
+  $('busesBtn').style.display = 'none';   // shown once Nick is in bus mode
   $('busesBtn').onclick = () => {
     busesOn = !busesOn;
     try { localStorage.setItem('navigoBuses', busesOn ? 'on' : 'off'); } catch (e) {}
@@ -839,7 +844,7 @@
     tip(busesOn ? 'Live buses on' : 'Live buses off');
     loadBuses();
   };
-  map.on('moveend', () => { if (busesOn) { clearTimeout(loadBuses.d); loadBuses.d = setTimeout(loadBuses, 600); } });
+  map.on('moveend', () => { if (busesOn && busMode()) { clearTimeout(loadBuses.d); loadBuses.d = setTimeout(loadBuses, 600); } });
   setTimeout(loadBuses, 3000);
 
   setInterval(render, 1000);   // keep "updated x seconds ago" ticking
