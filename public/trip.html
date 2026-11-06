@@ -177,6 +177,14 @@
     .me.onbus .busSign { top: -94px; }
     .me.onbus.nosign .face { top: -52px; }
     .me.onbus .np { bottom: 152px; }
+    /* their first name just above the face (Nick), in car, bus and walking mode */
+    .me .nm { position: absolute; left: 50%; top: -22px; transform: translateX(-50%); white-space: nowrap; pointer-events: none;
+      font: 800 13px/16px system-ui, sans-serif; color: #fff; text-shadow: 0 0 3px #000, 0 1px 3px #000, 0 0 6px rgba(0,0,0,.8); }
+    .me .nm:empty { display: none; }
+    .me.onbus .nm { top: -158px; }
+    .me.onbus.nosign .nm { top: -72px; }
+    .me.named .np { bottom: 78px; }
+    .me.onbus.named .np { bottom: 172px; }
     .ontime { color: #3DDC84; } .lateTime { color: #FFB020; } .lateBy { color: #FF4D4D; }
     .me .face { cursor: pointer; }
     /* tap the bus: its journey, train-style */
@@ -343,7 +351,7 @@
     if (!me) {
       const el = document.createElement('div'); el.style.zIndex = 5;
       el.innerHTML = '<div class="me"><div class="np"><span class="tag"></span><span class="st"></span><span class="txt"></span><span class="time"></span></div>' +
-        '<div class="arrow"></div><div class="face"></div><div class="mode"></div><div class="busSign"></div>' +
+        '<div class="arrow"></div><div class="nm"></div><div class="face"></div><div class="mode"></div><div class="busSign"></div>' +
         // the drawn bus Nick prefers (aquamarine, white roof, swoosh), not the Arriva picture
         '<svg class="busIcon" viewBox="0 0 30 72"><rect x="1" y="1" width="28" height="70" rx="6" fill="#00A9A4" stroke="#fff" stroke-width="2"/>' +
         '<rect x="5" y="13" width="20" height="53" rx="3" fill="#F4F2EA"/><path d="M5 45 25 36v5L5 50Z" fill="#00A9A4"/>' +
@@ -368,6 +376,9 @@
       // on the bus: the bus number under the face
       const sign = el.querySelector('.busSign'), bus = t.mode === 'bus' && t.bus;
       el.querySelector('.me').classList.toggle('onbus', t.mode === 'bus');
+      const nm = String(t.name || '').trim().split(/\s+/)[0] || '';   // first name only
+      if (el.querySelector('.nm').textContent !== nm) el.querySelector('.nm').textContent = nm;
+      el.querySelector('.me').classList.toggle('named', !!nm);
       const mi = t.mode === 'walk' ? '🚶' : t.mode === 'bus' ? '' : '🚗';
       if (el.querySelector('.mode').textContent !== mi) el.querySelector('.mode').textContent = mi;
       if (t.heading != null) el.querySelector('.busIcon').style.transform = 'rotate(' + t.heading + 'deg)';
