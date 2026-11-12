@@ -268,11 +268,19 @@ async function spotifySearch(q) {
 }
 
 // ---------- http ----------
-const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css', '.png': 'image/png', '.svg': 'image/svg+xml', '.glb': 'model/gltf-binary', '.ttf': 'font/ttf' };
+const SITE_VERSION = process.env.RENDER_GIT_COMMIT || String(Date.now());   // new on every deploy
+const MIME = { '.apk': 'application/vnd.android.package-archive', '.json': 'application/json', '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css', '.png': 'image/png', '.svg': 'image/svg+xml', '.glb': 'model/gltf-binary', '.ttf': 'font/ttf' };
 
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, 'http://x');
   if (url.pathname === '/health') return json(res, 200, { ok: true });
+  // NaviGO Live asks this when it opens and every minute: 'site' changes on every deploy (so the app reloads the page),
+  // 'app' is the newest NaviGO Live APK (public/app/navigo-live.json) so the app can offer the update itself.
+  if (url.pathname === '/api/version') {
+    let app = null;
+    try { app = JSON.parse(fs.readFileSync(path.join(PUBLIC_DIR, 'app', 'navigo-live.json'), 'utf8')); } catch (_) {}
+    return json(res, 200, { site: SITE_VERSION, app });
+  }
   if (url.pathname === '/api/music/search') {
     const q = String(url.searchParams.get('q') || '').trim().slice(0, 100);
     if (!q) return json(res, 400, { error: 'Type something to search for' });
@@ -328,7 +336,8 @@ const server = http.createServer(async (req, res) => {
   if (!file.startsWith(PUBLIC_DIR + path.sep)) { res.writeHead(403); return res.end(); }
   fs.readFile(file, (err, data) => {
     if (err) { res.writeHead(404); return res.end('Not found'); }
-    res.writeHead(200, { 'Content-Type': MIME[path.extname(file)] || 'application/octet-stream', 'Cache-Control': 'public, max-age=3600' });
+    const fresh = url.pathname.startsWith('/app/');   // app downloads are never cached
+    res.writeHead(200, { 'Content-Type': MIME[path.extname(file)] || 'application/octet-stream', 'Cache-Control': fresh ? 'no-cache' : 'public, max-age=3600' });
     res.end(data);
   });
 });
