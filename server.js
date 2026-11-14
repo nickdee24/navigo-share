@@ -63,7 +63,7 @@ function pruneShares() {
 function endShare(t, arrived) {
   t.endedAt = Date.now(); t.arrived = !!arrived;
   t.lastDest = t.dest ? t.dest.name : null;
-  t.music = null; t.place = null; t.placeAt = null; t.radio = null; t.activity = null; t.stop = null;
+  t.music = null; t.place = null; t.placeAt = null; t.radio = null; t.radioUrl = null; t.activity = null; t.stop = null;
   t.lat = t.lng = t.heading = t.speed = t.eta = t.remainingM = null; t.dest = null; t.route = null;
   t.routeV = (t.routeV || 0) + 1;
 }
@@ -72,7 +72,7 @@ const num = v => (v == null || v === '' || !isFinite(+v) ? null : +v);
 function publicShare(t) {
   return { name: t.name, mood: t.mood, emoji: t.emoji, hasPhoto: !!t.photo, photoV: t.photoV || 0, lat: t.lat, lng: t.lng, heading: t.heading,
     speed: t.speed, place: t.place || null, music: t.music || null,
-    radio: t.radio ? Object.assign({ hasLogo: !!t.radioLogo, logoV: t.radioLogoV || 0 }, t.radio) : null,
+    radio: t.radio ? Object.assign({ hasLogo: !!t.radioLogo, logoV: t.radioLogoV || 0, canListen: !!t.radioUrl }, t.radio) : null,
     mode: 'car', activity: t.activity || null, dest: t.dest, stop: t.stop || null, eta: t.eta, remainingM: t.remainingM, route: t.route, routeV: t.routeV || 0, lastDest: t.lastDest || null,
     startedAt: t.startedAt, updatedAt: t.updatedAt, endedAt: t.endedAt || null, arrived: !!t.arrived, now: Date.now() };
 }
@@ -106,10 +106,12 @@ async function handleShareApi(req, res, action) {
     const name = String(b.radio.name).slice(0, 60);
     if (!t.radio || t.radio.name !== name) { t.radioLogo = null; t.radioLogoV = (t.radioLogoV || 0) + 1; }
     t.radio = { name, genre: String(b.radio.genre || '').slice(0, 40), playing: !!b.radio.playing };
+    // the station's stream address, so the share page can 'Listen along' (kept here, the page plays it through /listen)
+    t.radioUrl = typeof b.radio.url === 'string' && /^https?:\/\/[^\s]{4,500}$/.test(b.radio.url) ? b.radio.url : null;
     if (typeof b.radio.logo === 'string' && b.radio.logo.length < 80000 && /^[A-Za-z0-9+/=]+$/.test(b.radio.logo)) {
       t.radioLogo = b.radio.logo; t.radioLogoV = (t.radioLogoV || 0) + 1;
     }
-  } else if (b.radio !== undefined) { t.radio = null; t.radioLogo = null; }
+  } else if (b.radio !== undefined) { t.radio = null; t.radioLogo = null; t.radioUrl = null; }
   // NaviGO is car only: driving or stopped
   if (b.activity !== undefined) t.activity = ['driving', 'stopped'].includes(b.activity) ? b.activity : null;
   const lat = num(b.lat), lng = num(b.lng);
@@ -222,6 +224,64 @@ async function spotifySearch(q) {
   };
 }
 
+
+// ---------- Listen along: pass the radio station NaviGO is playing on to the share page ----------
+// Many stations only stream over plain http (the page is https, so it can't play them itself) and some old
+// servers answer 'ICY 200 OK', which Node's http can't read. So: a tiny raw request, follow redirects, pipe the audio.
+const net = require('net'), tls = require('tls');
+const listeners = {};   // share id -> how many people are listening right now
+function openStream(u, cb, hops = 0) {
+  let url; try { url = new URL(u); } catch (_) { return cb(new Error('bad url')); }
+  const secure = url.protocol === 'https:', port = +url.port || (secure ? 443 : 80);
+  const sock = secure ? tls.connect({ host: url.hostname, port, servername: url.hostname }) : net.connect({ host: url.hostname, port });
+  let head = Buffer.alloc(0), done = false;
+  const fail = e => { if (done) return; done = true; sock.destroy(); cb(e); };
+  sock.setTimeout(10000, () => fail(new Error('timeout')));
+  sock.once(secure ? 'secureConnect' : 'connect', () => {
+    // HTTP/1.0 so the server never sends the audio in chunks
+    sock.write('GET ' + (url.pathname || '/') + url.search + ' HTTP/1.0\r\nHost: ' + url.host +
+      '\r\nUser-Agent: NaviGO-Share/1.0\r\nAccept: */*\r\nConnection: close\r\n\r\n');
+  });
+  sock.on('error', fail);
+  sock.on('data', function onData(d) {
+    head = Buffer.concat([head, d]);
+    const end = head.indexOf('\r\n\r\n');
+    if (end < 0) { if (head.length > 16384) fail(new Error('bad reply')); return; }
+    sock.removeListener('data', onData); sock.pause();
+    const lines = head.slice(0, end).toString('latin1').split('\r\n');
+    const status = +(lines[0].split(' ')[1] || 0), hdr = {};
+    lines.slice(1).forEach(l => { const i = l.indexOf(':'); if (i > 0) hdr[l.slice(0, i).trim().toLowerCase()] = l.slice(i + 1).trim(); });
+    if (status >= 300 && status < 400 && hdr.location) {
+      done = true; sock.destroy();
+      return hops < 4 ? openStream(new URL(hdr.location, url).href, cb, hops + 1) : cb(new Error('too many redirects'));
+    }
+    if (status !== 200) return fail(new Error('status ' + status));
+    done = true; sock.setTimeout(30000, () => sock.destroy());
+    cb(null, sock, hdr, head.slice(end + 4));
+  });
+}
+function listenAlong(req, res, id) {
+  const t = db.shares[id];
+  if (!t || t.endedAt || !t.radioUrl) { res.writeHead(404); return res.end(); }
+  if ((listeners[id] || 0) >= 4) { res.writeHead(429); return res.end(); }
+  listeners[id] = (listeners[id] || 0) + 1;
+  let src = null, closed = false;
+  const stop = () => { if (closed) return; closed = true; listeners[id]--; if (src) src.destroy(); };
+  req.on('close', stop); res.on('close', stop);
+  openStream(t.radioUrl, (err, sock, hdr, first) => {
+    if (closed) { if (sock) sock.destroy(); return; }
+    if (err) { stop(); res.writeHead(502); return res.end(); }
+    src = sock;
+    let type = (hdr['content-type'] || 'audio/mpeg').split(';')[0];
+    if (!/^(audio|application\/ogg)/.test(type)) type = 'audio/mpeg';
+    res.writeHead(200, { 'Content-Type': type, 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' });
+    if (first.length) res.write(first);
+    sock.pipe(res);
+    sock.on('end', () => res.end()); sock.on('error', () => res.end());
+    sock.resume();
+  });
+}
+
 // ---------- http ----------
 const SITE_VERSION = process.env.RENDER_GIT_COMMIT || String(Date.now());   // new on every deploy
 const MIME = { '.apk': 'application/vnd.android.package-archive', '.json': 'application/json', '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css', '.png': 'image/png', '.svg': 'image/svg+xml', '.glb': 'model/gltf-binary', '.ttf': 'font/ttf' };
@@ -297,6 +357,8 @@ const server = http.createServer(async (req, res) => {
     res.writeHead(200, { 'Content-Type': 'image/jpeg', 'Cache-Control': 'no-cache' });
     return res.end(Buffer.from(t.photo, 'base64'));
   }
+  const listen = url.pathname.match(/^\/api\/share\/([A-Za-z0-9]{8,16})\/listen$/);
+  if (listen) return listenAlong(req, res, listen[1]);
   const radioLogo = url.pathname.match(/^\/api\/share\/([A-Za-z0-9]{8,16})\/radiologo$/);
   if (radioLogo) {
     const t = db.shares[radioLogo[1]];

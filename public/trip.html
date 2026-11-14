@@ -60,6 +60,11 @@
     #song .txt { white-space: normal; overflow-wrap: anywhere; min-width: 0; line-height: 1.3; }
     #song .tag, #song .st { margin-top: 1px; }
     #song .time { flex: none; margin-left: auto; padding-left: 6px; color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+    #listenBtn { display: none; margin-top: 9px; width: 100%; padding: 9px 12px; border: 0; border-radius: 10px; background: var(--accent); color: #fff; font: inherit; font-size: 14px; font-weight: 700; cursor: pointer; }
+    #listenBtn.show { display: block; }
+    #listenBtn.on { background: var(--alt); color: var(--text); }
+    #listenNote { display: none; margin-top: 5px; font-size: 12px; color: var(--muted); }
+    #listenNote.show { display: block; }
     #songBar { display: none; height: 3px; margin-top: 5px; background: #2F343C; border-radius: 2px; overflow: hidden; }
     #songBar.show { display: block; }
     #songBar > div { height: 100%; width: 0; background: #1DB954; }
@@ -229,6 +234,9 @@
       </div>
       <div id="song"><span class="tag"></span><span class="st"></span><span class="txt"></span><span class="time"></span></div>
       <div id="songBar"><div></div></div>
+      <button id="listenBtn" type="button">🎧 Listen along</button>
+      <div id="listenNote"></div>
+      <audio id="listenAudio" preload="none"></audio>
     </div>
   </div>
 
@@ -394,6 +402,41 @@
     st.textContent = r.playing ? '▶' : '❚❚'; st.className = 'st' + (r.playing ? '' : ' paused');
     box.querySelector('.txt').textContent = r.name + (r.genre ? ' · ' + r.genre : '') + (r.playing ? ' · Live' : ' · Paused');
   }
+  // Listen along: play the same radio station on this phone (through our server, a few seconds behind)
+  let listening = false, listenStation = null, listenFailAt = 0;
+  function listenNote(txt) { $('listenNote').textContent = txt || ''; $('listenNote').classList.toggle('show', !!txt); }
+  function startListen(r) {
+    const a = $('listenAudio');
+    listenStation = r.name;
+    a.src = '/api/share/' + id + '/listen?s=' + encodeURIComponent(r.name) + '&t=' + Date.now();
+    listenNote('Connecting to ' + r.name + '…');
+    a.play().catch(() => {});
+  }
+  function stopListen(note) {
+    const a = $('listenAudio'); a.pause(); a.removeAttribute('src'); a.load();
+    listenStation = null; listenNote(note || '');
+  }
+  function updateListen(r) {
+    const btn = $('listenBtn'), can = !!(r && r.canListen);
+    btn.classList.toggle('show', can || listening);
+    if (!can) { if (listening) { listening = false; stopListen('The radio has gone off.'); } }
+    else if (listening) {
+      if (!r.playing) { if (listenStation) stopListen('Paused, it carries on when the radio does.'); }
+      else if (listenStation !== r.name && Date.now() - listenFailAt > 20000) startListen(r);   // they changed station, or pressed play again
+    }
+    btn.classList.toggle('on', listening);
+    btn.textContent = listening ? '■ Stop listening' : '🎧 Listen along';
+    if (!can && !listening) btn.classList.remove('show');
+  }
+  $('listenBtn').onclick = () => {
+    listening = !listening; listenFailAt = 0;
+    if (!listening) stopListen(); else if (data && !data.endedAt && data.radio && data.radio.playing) startListen(data.radio);
+    else listenNote('Paused, it carries on when the radio does.');
+    updateListen(data && !data.endedAt ? data.radio : null);
+  };
+  $('listenAudio').addEventListener('playing', () => listenNote('Listening live to ' + listenStation + ', a few seconds behind.'));
+  $('listenAudio').addEventListener('error', () => { if (listening && listenStation) { listenStation = null; listenFailAt = Date.now(); listenNote("Couldn't play this station here. Try again in a bit."); } });
+
   // Music app tag (Spotify / YouTube Music); swaps back from a radio logo if needed
   function musicTag(box, m) {
     let tag = box.querySelector('.tag, img.logo');
@@ -481,6 +524,7 @@
       song.querySelector('.txt').textContent = [m.artist, m.title].filter(Boolean).join(' – ');
       song.querySelector('.time').textContent = songTime(m);
     }
+    updateListen(radio);
     const bar = $('songBar'), p = m ? songPos(m) : null;
     bar.classList.toggle('show', !!(m && p != null && m.dur));
     if (m) bar.className = (m && p != null && m.dur ? 'show ' : '') + (m.player || '').toLowerCase();
