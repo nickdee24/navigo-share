@@ -63,7 +63,7 @@ function pruneShares() {
 function endShare(t, arrived) {
   t.endedAt = Date.now(); t.arrived = !!arrived;
   t.lastDest = t.dest ? t.dest.name : null;
-  t.music = null; t.place = null; t.placeAt = null; t.radio = null; t.bus = null; t.activity = null;
+  t.music = null; t.place = null; t.placeAt = null; t.radio = null; t.activity = null;
   t.lat = t.lng = t.heading = t.speed = t.eta = t.remainingM = null; t.dest = null; t.route = null;
   t.routeV = (t.routeV || 0) + 1;
 }
@@ -73,7 +73,7 @@ function publicShare(t) {
   return { name: t.name, mood: t.mood, emoji: t.emoji, hasPhoto: !!t.photo, photoV: t.photoV || 0, lat: t.lat, lng: t.lng, heading: t.heading,
     speed: t.speed, place: t.place || null, music: t.music || null,
     radio: t.radio ? Object.assign({ hasLogo: !!t.radioLogo, logoV: t.radioLogoV || 0 }, t.radio) : null,
-    mode: t.mode || 'car', activity: t.activity || null, bus: t.bus || null, dest: t.dest, eta: t.eta, remainingM: t.remainingM, route: t.route, routeV: t.routeV || 0, lastDest: t.lastDest || null,
+    mode: 'car', activity: t.activity || null, dest: t.dest, eta: t.eta, remainingM: t.remainingM, route: t.route, routeV: t.routeV || 0, lastDest: t.lastDest || null,
     startedAt: t.startedAt, updatedAt: t.updatedAt, endedAt: t.endedAt || null, arrived: !!t.arrived, now: Date.now() };
 }
 async function handleShareApi(req, res, action) {
@@ -110,19 +110,8 @@ async function handleShareApi(req, res, action) {
       t.radioLogo = b.radio.logo; t.radioLogoV = (t.radioLogoV || 0) + 1;
     }
   } else if (b.radio !== undefined) { t.radio = null; t.radioLogo = null; }
-  // Car / bus / walking: the mode picked in the app, and what you're doing now (driving, stopped, bus, walking)
-  if (b.mode !== undefined) t.mode = ['car', 'bus', 'walk'].includes(b.mode) ? b.mode : 'car';
-  if (b.activity !== undefined) t.activity = ['driving', 'stopped', 'bus', 'walking'].includes(b.activity) ? b.activity : null;
-  if (b.bus && b.bus.service) {
-    t.bus = { service: String(b.bus.service).slice(0, 8), heading: String(b.bus.heading || '').slice(0, 60) };
-    // the bus's journey (when known): where it's going, arrival time, minutes late, stops left and the stops to come
-    if (b.bus.destination !== undefined) {
-      Object.assign(t.bus, { destination: String(b.bus.destination || '').slice(0, 80), street: String(b.bus.street || '').slice(0, 80),
-        eta: num(b.bus.eta), delayMin: num(b.bus.delayMin) || 0, stopsLeft: num(b.bus.stopsLeft), stopNo: num(b.bus.stopNo), stopOf: num(b.bus.stopOf), getOff: String(b.bus.getOff || '').slice(0, 80),
-        stops: Array.isArray(b.bus.stops) ? b.bus.stops.slice(0, 60).map(x => ({ name: String((x && x.name) || '').slice(0, 80), t: num(x && x.t) })) : [] });
-    }
-  }
-  else if (b.bus !== undefined) t.bus = null;
+  // NaviGO is car only: driving or stopped
+  if (b.activity !== undefined) t.activity = ['driving', 'stopped'].includes(b.activity) ? b.activity : null;
   const lat = num(b.lat), lng = num(b.lng);
   if (lat != null && lng != null && Math.abs(lat) <= 90 && Math.abs(lng) <= 180) {
     t.lat = lat; t.lng = lng; t.heading = num(b.heading); t.speed = num(b.speed); t.updatedAt = Date.now();
@@ -201,48 +190,6 @@ async function itunesSearch(q) {
   return { source: 'itunes', artists: [], tracks: (j.results || []).map(t => ({ name: t.trackName, uri: '', artists: t.artistName,
     album: t.collectionName, image: (t.artworkUrl100 || '').replace('100x100', '120x120') || null, durationMs: t.trackTimeMillis || 0 })) };
 }
-// ---------- live buses for the map: the government's Bus Open Data Service live feed (SIRI-VM), cached briefly ----------
-// Needs Nick's free BODS key in Render's Environment as BODS_KEY (never in the code).
-const BODS_KEY = process.env.BODS_KEY || '';
-const busCache = new Map();
-let bodsLonFirst = true;   // which way round the feed wants its box; flipped if one way returns nothing
-function sirivm(xml) {
-  const now = Date.now(), out = [];
-  const tag = (blk, t) => { const m = blk.match(new RegExp('<' + t + '>([^<]*)</' + t + '>')); return m ? m[1].trim() : ''; };
-  for (const m of xml.matchAll(/<VehicleActivity>([\s\S]*?)<\/VehicleActivity>/g)) {
-    const blk = m[1];
-    const loc = (blk.match(/<VehicleLocation>([\s\S]*?)<\/VehicleLocation>/) || [])[1] || '';
-    const lat = +tag(loc, 'Latitude'), lng = +tag(loc, 'Longitude');
-    if (!isFinite(lat) || !isFinite(lng) || (!lat && !lng)) continue;
-    const at = Date.parse(tag(blk, 'RecordedAtTime'));
-    if (isFinite(at) && now - at > 600000) continue;          // not heard from for 10 minutes: parked up
-    const b = tag(blk, 'Bearing');
-    out.push({ id: tag(blk, 'VehicleRef') || (tag(blk, 'OperatorRef') + lat + lng),
-      line: tag(blk, 'PublishedLineName') || tag(blk, 'LineRef'), dest: tag(blk, 'DestinationName').replace(/_/g, ' '),
-      lat, lng, heading: b === '' ? null : +b, at: isFinite(at) ? at : null });
-  }
-  return out;
-}
-async function bodsBox(s, w, n, e, lonFirst) {
-  const box = lonFirst ? `${w},${s},${e},${n}` : `${s},${n},${w},${e}`;
-  const r = await fetch(`https://data.bus-data.dft.gov.uk/api/v1/datafeed/?boundingBox=${box}&api_key=${encodeURIComponent(BODS_KEY)}`,
-    { headers: { 'User-Agent': 'NaviGO-ShareTrip/1.0 (personal trip sharing)' } });
-  if (!r.ok) throw new Error('HTTP ' + r.status);
-  return sirivm(await r.text()).filter(v => v.lat >= s && v.lat <= n && v.lng >= w && v.lng <= e);
-}
-async function liveBuses(s, w, n, e) {
-  if (!BODS_KEY) throw new Error('No BODS_KEY set');
-  const k = [s, w, n, e].map(v => v.toFixed(2)).join(',');
-  const hit = busCache.get(k);
-  if (hit && Date.now() - hit.at < 4000) return hit.list;
-  let list = await bodsBox(s, w, n, e, bodsLonFirst);
-  if (!list.length) { const other = await bodsBox(s, w, n, e, !bodsLonFirst).catch(() => []); if (other.length) { bodsLonFirst = !bodsLonFirst; list = other; } }
-  list = list.slice(0, 600);
-  busCache.set(k, { at: Date.now(), list });
-  if (busCache.size > 500) busCache.delete(busCache.keys().next().value);
-  return list;
-}
-
 async function musicSearch(q) {
   try { return await spotifySearch(q); }
   catch (e) { console.log('Using backup song search:', e.message); return itunesSearch(q); }
@@ -290,13 +237,6 @@ const server = http.createServer(async (req, res) => {
   if (url.pathname === '/config.js') {
     res.writeHead(200, { 'Content-Type': MIME['.js'], 'Cache-Control': 'no-cache' });
     return res.end('window.MAPBOX_TOKEN = ' + JSON.stringify(MAPBOX_TOKEN) + ';window.GMAPS_KEY = ' + JSON.stringify(GOOGLE_MAPS_KEY) + ';');
-  }
-  if (url.pathname === '/api/buses') {
-    const p = k => +url.searchParams.get(k);
-    const sb = p('s'), wb = p('w'), nb = p('n'), eb = p('e');
-    if (![sb, wb, nb, eb].every(isFinite) || nb <= sb || eb <= wb || nb - sb > 0.8 || eb - wb > 1.4) return json(res, 400, { error: 'Bad area' });
-    try { return json(res, 200, await liveBuses(sb, wb, nb, eb)); }
-    catch (err) { return json(res, 503, { error: 'Live buses not available right now' }); }
   }
   const shareApi = url.pathname.match(/^\/api\/share\/(update|end)$/);
   if (shareApi && req.method === 'POST') return handleShareApi(req, res, shareApi[1]);
