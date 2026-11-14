@@ -120,12 +120,10 @@
       white-space: nowrap; pointer-events: none; padding: 2px 8px; border-radius: 10px; background: rgba(23,26,31,.94); border: 1px solid var(--border);
       font: 600 11px/15px system-ui, sans-serif; color: var(--text); box-shadow: 0 2px 6px rgba(0,0,0,.5); }
     .me .live.show { display: flex; }
-    /* bouncing music note on the picture while music or the radio is playing */
-    .me .note { position: absolute; right: -10px; top: -6px; width: 24px; height: 24px; border-radius: 50%; background: #1DB954; color: #fff;
-      display: none; align-items: center; justify-content: center; font: 700 15px/1 system-ui, sans-serif; box-shadow: 0 2px 6px rgba(0,0,0,.6);
-      animation: noteBounce 1s ease-in-out infinite; pointer-events: none; }
-    .me .note.show { display: flex; }
-    @keyframes noteBounce { 0%, 100% { transform: translateY(0) rotate(-8deg); } 50% { transform: translateY(-6px) rotate(8deg); } }
+    /* headphones over the picture while music or the radio is playing (static, like they're wearing them) */
+    .me .note { position: absolute; left: -2px; top: -4px; width: 60px; height: 50px; display: none; pointer-events: none;
+      filter: drop-shadow(0 1px 2px rgba(0,0,0,.7)); }
+    .me .note.show { display: block; }
     .me .live .dot { width: 7px; height: 7px; }
     .me .mode { position: absolute; left: 50%; top: 52px; transform: translateX(-50%); width: 44px; height: 44px;
       display: flex; align-items: center; justify-content: center; font-size: 36px; line-height: 1;
@@ -357,7 +355,7 @@
     if (!me) {
       const el = document.createElement('div'); el.style.zIndex = 5;
       el.innerHTML = '<div class="me"><div class="np"><span class="tag"></span><span class="st"></span><span class="txt"></span><span class="time"></span></div>' +
-        '<div class="arrow"></div><div class="live"><span class="dot"></span><span class="lt"></span></div><div class="nm"></div><div class="face"></div><div class="note">♪</div></div>';
+        '<div class="arrow"></div><div class="live"><span class="dot"></span><span class="lt"></span></div><div class="nm"></div><div class="face"></div><svg class="note" viewBox="0 0 60 50"><path d="M9 34 V27 a21 21 0 0 1 42 0 V34" fill="none" stroke="#1D2127" stroke-width="7" stroke-linecap="round"/><path d="M9 34 V27 a21 21 0 0 1 42 0 V34" fill="none" stroke="#E9EDF3" stroke-width="3.5" stroke-linecap="round"/><rect x="2" y="28" width="12" height="18" rx="5" fill="#1DB954" stroke="#fff" stroke-width="2"/><rect x="46" y="28" width="12" height="18" rx="5" fill="#1DB954" stroke="#fff" stroke-width="2"/></svg></div>';
       me = new mapboxgl.Marker({ element: el }).setLngLat(ll).addTo(map);
       photoV = -1;
     }
