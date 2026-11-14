@@ -63,7 +63,7 @@ function pruneShares() {
 function endShare(t, arrived) {
   t.endedAt = Date.now(); t.arrived = !!arrived;
   t.lastDest = t.dest ? t.dest.name : null;
-  t.music = null; t.place = null; t.placeAt = null; t.radio = null; t.activity = null;
+  t.music = null; t.place = null; t.placeAt = null; t.radio = null; t.activity = null; t.stop = null;
   t.lat = t.lng = t.heading = t.speed = t.eta = t.remainingM = null; t.dest = null; t.route = null;
   t.routeV = (t.routeV || 0) + 1;
 }
@@ -73,7 +73,7 @@ function publicShare(t) {
   return { name: t.name, mood: t.mood, emoji: t.emoji, hasPhoto: !!t.photo, photoV: t.photoV || 0, lat: t.lat, lng: t.lng, heading: t.heading,
     speed: t.speed, place: t.place || null, music: t.music || null,
     radio: t.radio ? Object.assign({ hasLogo: !!t.radioLogo, logoV: t.radioLogoV || 0 }, t.radio) : null,
-    mode: 'car', activity: t.activity || null, dest: t.dest, eta: t.eta, remainingM: t.remainingM, route: t.route, routeV: t.routeV || 0, lastDest: t.lastDest || null,
+    mode: 'car', activity: t.activity || null, dest: t.dest, stop: t.stop || null, eta: t.eta, remainingM: t.remainingM, route: t.route, routeV: t.routeV || 0, lastDest: t.lastDest || null,
     startedAt: t.startedAt, updatedAt: t.updatedAt, endedAt: t.endedAt || null, arrived: !!t.arrived, now: Date.now() };
 }
 async function handleShareApi(req, res, action) {
@@ -121,13 +121,21 @@ async function handleShareApi(req, res, action) {
     t.dest = { name: String(b.dest.name || 'Destination').slice(0, 80), lat: +b.dest.lat, lng: +b.dest.lng };
   } else if (b.dest === null) { t.dest = null; t.route = null; }
   t.eta = num(b.eta); t.remainingM = num(b.remainingM);
+  // a stop added on the way: shown as "Next stop" with its own arrival time and distance
+  if (b.stop && isFinite(+b.stop.lat) && isFinite(+b.stop.lng)) {
+    t.stop = { name: String(b.stop.name || 'Stop').slice(0, 80), lat: +b.stop.lat, lng: +b.stop.lng, eta: num(b.stop.eta), remainingM: num(b.stop.remainingM) };
+  } else if (b.stop !== undefined) t.stop = null;
   if (b.route !== undefined) { t.route = b.route ? cleanRoute(b.route) : null; t.routeV = (t.routeV || 0) + 1; }
   // Profile photo shown as the car icon: a small JPEG as base64, sent once (and again when it changes).
   if (typeof b.photo === 'string' && b.photo.length < 60000 && /^[A-Za-z0-9+/=]+$/.test(b.photo)) { t.photo = b.photo; t.photoV = (t.photoV || 0) + 1; }
   if (b.photo === null) t.photo = null;
+  // messages people sent from the share page that the app hasn't had yet (handed over once)
+  const inbox = (t.inbox || []).filter(m => !m.delivered);
+  inbox.forEach(m => { m.delivered = Date.now(); });
   save();
   return json(res, 200, { ok: true, url: '/t/' + id, needRoute: !!(t.dest && !t.route), needPhoto: !!b.wantPhoto && !t.photo,
     needRadioLogo: !!(t.radio && !t.radioLogo),
+    inbox: inbox.map(m => ({ id: m.id, from: m.from, text: m.text, emote: m.emote, at: m.at })),
     // someone has the share page open and on screen right now (the app shows an eye above your mood)
     watching: !!(t.watchedAt && Date.now() - t.watchedAt < 15000) });
 }
@@ -238,13 +246,49 @@ const server = http.createServer(async (req, res) => {
     res.writeHead(200, { 'Content-Type': MIME['.js'], 'Cache-Control': 'no-cache' });
     return res.end('window.MAPBOX_TOKEN = ' + JSON.stringify(MAPBOX_TOKEN) + ';window.GMAPS_KEY = ' + JSON.stringify(GOOGLE_MAPS_KEY) + ';');
   }
+  // "Send Nick a message" from the share page: a short message or an emote, picked up by the app on its next update
+  const shareMsg = url.pathname.match(/^\/api\/share\/([A-Za-z0-9]{8,16})\/msg$/);
+  if (shareMsg && req.method === 'POST') {
+    const t = db.shares[shareMsg[1]], b = await readJSON(req);
+    if (!t || t.endedAt) return json(res, 404, { error: 'Not sharing right now' });
+    if (!b) return json(res, 400, { error: 'Bad JSON' });
+    const viewer = String(b.viewer || '').replace(/[^A-Za-z0-9]/g, '').slice(0, 24), text = String(b.text || '').trim().slice(0, 140);
+    if (!viewer || !text) return json(res, 400, { error: 'Type a message first' });
+    t.inbox = t.inbox || [];
+    const last = t.inbox.filter(m => m.viewer === viewer).pop();
+    if (last && Date.now() - last.at < 3000) return json(res, 429, { error: 'Slow down a little' });
+    const m = { id: Math.random().toString(36).slice(2, 10), viewer, from: String(b.from || '').trim().slice(0, 30) || 'Someone',
+      text, emote: !!b.emote, at: Date.now() };
+    t.inbox.push(m);
+    if (t.inbox.length > 30) t.inbox.splice(0, t.inbox.length - 30);
+    save();
+    return json(res, 200, { ok: true, id: m.id });
+  }
+  // The app's reply to a message: "ack" (seen it) or "emote" (the same emote sent back)
+  if (url.pathname === '/api/share/reply' && req.method === 'POST') {
+    const b = await readJSON(req);
+    if (!b) return json(res, 400, { error: 'Bad JSON' });
+    const t = db.shares[String(b.id || '')];
+    if (!t || t.key !== String(b.key || '')) return json(res, 403, { error: 'Wrong key' });
+    const m = (t.inbox || []).find(x => x.id === String(b.msgId || ''));
+    if (!m) return json(res, 404, { error: 'No such message' });
+    m.reply = { kind: b.kind === 'emote' ? 'emote' : 'ack', at: Date.now() };
+    save();
+    return json(res, 200, { ok: true });
+  }
   const shareApi = url.pathname.match(/^\/api\/share\/(update|end)$/);
   if (shareApi && req.method === 'POST') return handleShareApi(req, res, shareApi[1]);
   const shareGet = url.pathname.match(/^\/api\/share\/([A-Za-z0-9]{8,16})$/);
   if (shareGet) {
     const t = db.shares[shareGet[1]];
     if (t && url.searchParams.get('w') === '1') t.watchedAt = Date.now();   // a viewer has the page on screen (kept in memory only)
-    return t ? json(res, 200, publicShare(t)) : json(res, 404, { error: 'Nothing shared on this link yet.' });
+    if (!t) return json(res, 404, { error: 'Nothing shared on this link yet.' });
+    // replies to this viewer's messages that they haven't seen yet
+    const viewer = String(url.searchParams.get('viewer') || '');
+    const replies = viewer ? (t.inbox || []).filter(m => m.viewer === viewer && m.reply && !m.replyShown) : [];
+    if (replies.length) { replies.forEach(m => { m.replyShown = Date.now(); }); save(); }
+    return json(res, 200, Object.assign(publicShare(t), {
+      replies: replies.map(m => ({ msgId: m.id, kind: m.reply.kind, text: m.text, emote: m.emote })) }));
   }
   const sharePhoto = url.pathname.match(/^\/api\/share\/([A-Za-z0-9]{8,16})\/photo$/);
   if (sharePhoto) {

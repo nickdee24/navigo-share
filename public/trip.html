@@ -115,6 +115,12 @@
       filter: drop-shadow(0 0 1.5px #fff); }
     .me.old .face { filter: grayscale(.8); opacity: .75; }
     /* a little car under the face */
+    /* "Live · updated just now": a small tag above their name, just big enough for the words */
+    .me .live { position: absolute; left: 50%; top: -48px; transform: translateX(-50%); display: none; align-items: center; gap: 5px;
+      white-space: nowrap; pointer-events: none; padding: 2px 8px; border-radius: 10px; background: rgba(23,26,31,.94); border: 1px solid var(--border);
+      font: 600 11px/15px system-ui, sans-serif; color: var(--text); box-shadow: 0 2px 6px rgba(0,0,0,.5); }
+    .me .live.show { display: flex; }
+    .me .live .dot { width: 7px; height: 7px; }
     .me .mode { position: absolute; left: 50%; top: 52px; transform: translateX(-50%); width: 44px; height: 44px;
       display: flex; align-items: center; justify-content: center; font-size: 36px; line-height: 1;
       filter: drop-shadow(0 2px 3px rgba(0,0,0,.7)); }   /* just the icon, no circle, as big as the face (Nick) */
@@ -134,8 +140,40 @@
     .me .nm { position: absolute; left: 50%; top: -22px; transform: translateX(-50%); white-space: nowrap; pointer-events: none;
       font: 800 13px/16px system-ui, sans-serif; color: #fff; text-shadow: 0 0 3px #000, 0 1px 3px #000, 0 0 6px rgba(0,0,0,.8); }
     .me .nm:empty { display: none; }
-    .me.named .np { bottom: 78px; }
+    .me.named .np { bottom: 104px; }
+    .secT { font-size: 13px; color: var(--muted); margin-top: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .secT b { color: var(--text); font-weight: 600; }
+    #stopSec { display: none; }
+    .stopPin { width: 26px; height: 26px; border-radius: 50%; background: #fff; border: 4px solid #3B9EFF; box-shadow: 0 2px 6px rgba(0,0,0,.6); }
     .me .face { cursor: pointer; }
+    /* "Message Nick": button, sheet with ready-made messages and emotes, and the replies coming back */
+    #msgBtn { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(22px + env(safe-area-inset-bottom)); z-index: 1000; display: none;
+      border: 0; border-radius: 999px; background: #33CCFF; color: #0D1B2A; font: 700 16px system-ui, sans-serif; padding: 13px 22px;
+      box-shadow: 0 6px 16px rgba(0,0,0,.45); cursor: pointer; }
+    body.sv #msgBtn { bottom: calc(25vh + 22px); }
+    #msgSheet { position: fixed; inset: 0; z-index: 2500; display: none; background: rgba(0,0,0,.55); }
+    #msgSheet.show { display: block; }
+    #msgSheet .sheet { position: absolute; left: 0; right: 0; bottom: 0; max-width: 520px; margin: 0 auto; background: var(--panel);
+      border-radius: 22px 22px 0 0; padding: 14px 18px calc(18px + env(safe-area-inset-bottom)); max-height: 85vh; overflow: auto; }
+    #msgSheet .handle { width: 40px; height: 4px; border-radius: 2px; background: #555; margin: 0 auto 12px; }
+    #msgSheet h3 { margin: 0 0 10px; font-size: 19px; }
+    #msgSheet input { width: 100%; background: var(--alt); border: 1px solid var(--border); border-radius: 12px; color: var(--text);
+      font: 16px system-ui, sans-serif; padding: 12px 14px; outline: none; }
+    #msgSheet .lbl { color: var(--muted); font-size: 13px; margin: 12px 0 6px; }
+    #msgSheet .chips { display: flex; flex-wrap: wrap; gap: 8px; }
+    #msgSheet .chip { border: 1px solid var(--border); background: var(--alt); color: var(--text); border-radius: 999px; padding: 9px 14px;
+      font: 600 14px system-ui, sans-serif; cursor: pointer; }
+    #msgSheet .emo { font-size: 28px; padding: 6px 10px; }
+    #msgSheet .row { display: flex; gap: 8px; margin-top: 8px; }
+    #msgSheet .send { flex: none; border: 0; border-radius: 12px; background: #33CCFF; color: #0D1B2A; font: 700 16px system-ui, sans-serif; padding: 0 18px; cursor: pointer; }
+    #replyToast { position: fixed; left: 50%; top: calc(16px + env(safe-area-inset-top)); transform: translate(-50%, -150%); z-index: 3000;
+      background: var(--panel); border: 1.5px solid #33CCFF; border-radius: 14px; padding: 12px 18px; font-weight: 700; font-size: 16px;
+      box-shadow: 0 8px 24px rgba(0,0,0,.5); transition: transform .35s; white-space: nowrap; }
+    #replyToast.show { transform: translate(-50%, 0); }
+    .burst { position: fixed; left: 50%; bottom: 20vh; z-index: 3000; font-size: 110px; transform: translateX(-50%); pointer-events: none;
+      animation: burst 3s ease-out forwards; }
+    @keyframes burst { 0% { opacity: 0; transform: translate(-50%, 40px) scale(.6); } 15% { opacity: 1; transform: translate(-50%, 0) scale(1); }
+      80% { opacity: 1; } 100% { opacity: 0; transform: translate(-50%, -45vh) scale(1.1); } }
     .flag { font-size: 30px; line-height: 1; filter: drop-shadow(0 2px 3px rgba(0,0,0,.6)); }
   </style>
 </head>
@@ -150,6 +188,15 @@
     <div class="box" id="placeBox">
       <div id="where"></div>
       <div id="to"></div>
+      <div id="stopSec">
+        <div class="secT">Next stop · <b id="stopName"></b></div>
+        <div class="stats">
+          <div class="stat"><div class="v" id="sArrive">--:--</div><div class="l">Arrival</div></div>
+          <div class="stat"><div class="v" id="sLeft">--</div><div class="l">Time left</div></div>
+          <div class="stat"><div class="v" id="sDist">--</div><div class="l">Distance</div></div>
+        </div>
+        <div class="secT">Final destination · <b id="finalName"></b></div>
+      </div>
       <div class="stats" id="stats">
         <div class="stat"><div class="v" id="arrive">--:--</div><div class="l">Arrival</div></div>
         <div class="stat"><div class="v" id="left">--</div><div class="l">Time left</div></div>
@@ -158,7 +205,7 @@
       <div id="progress">
         <svg class="flagIc" viewBox="0 0 18 22" aria-label="Start"><line x1="3" y1="2" x2="3" y2="21" stroke="#fff" stroke-width="2" stroke-linecap="round"/><path d="M4 2.5c4-1.6 8 1.6 12 .3v8.4c-4 1.4-8-1.8-12-.2Z" fill="#3B9EFF"/></svg>
         <div class="track"><div class="fill"></div>
-          <svg class="car" viewBox="0 0 26 16" aria-label="Car"><rect x="1" y="2" width="24" height="12" rx="4" fill="#3B9EFF" stroke="#fff" stroke-width="1.5"/><rect x="14" y="4" width="5" height="8" rx="1.5" fill="#9FD3F5"/><rect x="4" y="4.5" width="4" height="7" rx="1.2" fill="#5E7F96"/><circle cx="23.5" cy="4.5" r="1" fill="#FFF59D"/><circle cx="23.5" cy="11.5" r="1" fill="#FFF59D"/></svg>
+          <svg class="car" viewBox="0 0 26 16" aria-label="Car"><rect x="1" y="2" width="24" height="12" rx="4" fill="#C3C9D1" stroke="#fff" stroke-width="1.5"/><rect x="14" y="4" width="5" height="8" rx="1.5" fill="#4A5563"/><rect x="4" y="4.5" width="4" height="7" rx="1.2" fill="#6B7684"/><circle cx="23.5" cy="4.5" r="1" fill="#FFF59D"/><circle cx="23.5" cy="11.5" r="1" fill="#FFF59D"/></svg>
         </div>
         <svg class="flagIc" viewBox="0 0 18 22" aria-label="Finish"><defs><pattern id="chq" width="4" height="4" patternUnits="userSpaceOnUse"><rect width="4" height="4" fill="#fff"/><rect width="2" height="2" fill="#111"/><rect x="2" y="2" width="2" height="2" fill="#111"/></pattern></defs><line x1="3" y1="2" x2="3" y2="21" stroke="#fff" stroke-width="2" stroke-linecap="round"/><path d="M4 2.5h12.5v8.5H4Z" fill="url(#chq)" stroke="#fff" stroke-width=".8"/></svg>
       </div>
@@ -174,6 +221,20 @@
     </div>
   </div>
 
+  <button id="msgBtn">💬 Message</button>
+  <div id="msgSheet"><div class="sheet">
+    <div class="handle"></div>
+    <h3 id="msgTitle2">Send a message</h3>
+    <div class="lbl">Your name</div>
+    <input id="msgFrom" maxlength="30" placeholder="So they know who it's from">
+    <div class="lbl">Quick messages</div>
+    <div class="chips" id="msgQuick"></div>
+    <div class="lbl">Emotes</div>
+    <div class="chips" id="msgEmotes"></div>
+    <div class="lbl">Or write your own</div>
+    <div class="row"><input id="msgText" maxlength="140" placeholder="Type a message"><button class="send" id="msgSend">Send</button></div>
+  </div></div>
+  <div id="replyToast"></div>
   <button id="follow" class="on" title="Follow">◎</button>
   <div id="brand">Shared from <b>NaviGO</b></div>
   <div id="speedo"><svg viewBox="0 0 76 76"><circle cx="38" cy="38" r="34.5" fill="none" stroke="rgba(238,238,238,.6)" stroke-width="2" stroke-dasharray="4 6"/></svg><b>0</b><i>mph</i></div>
@@ -195,11 +256,23 @@
   const map = new mapboxgl.Map({ container: 'map', style: 'mapbox://styles/mapbox/dark-v11', center: [-2.63, 53.55], zoom: 11,
     dragRotate: false, pitchWithRotate: false });
   map.touchZoomRotate.disableRotation();
+  // Waze-style: zoom in and the map leans into 3D, zoom out and it flattens (flat from town level)
+  const pitchFor = z => z >= 17 ? 58 : z <= 13 ? 0 : (z - 13) / 4 * 58;
+  map.on('zoom', e => { if (e.originalEvent) map.setPitch(pitchFor(map.getZoom())); });
+  map.on('moveend', () => { const p = pitchFor(map.getZoom()); if (Math.abs(map.getPitch() - p) > 1) map.easeTo({ pitch: p, duration: 300 }); });
+  // the next stop's pin
+  let stopMark = null;
+  function drawStop(s) {
+    if (!s || !mapReady) { if (stopMark) { stopMark.remove(); stopMark = null; } return; }
+    if (!stopMark) { const el = document.createElement('div'); el.className = 'stopPin'; stopMark = new mapboxgl.Marker({ element: el }).setLngLat([s.lng, s.lat]).addTo(map); }
+    else stopMark.setLngLat([s.lng, s.lat]);
+  }
   let mapReady = false;
   const emptyLine = () => ({ type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: [] } });
   map.on('style.load', () => {
     TDMap.apply(map, true);
     const lbl = (map.getStyle().layers.find(l => l.type === 'symbol') || {}).id;
+    TDMap.traffic(map, lbl);
     const w = k => ['interpolate', ['exponential', 1.5], ['zoom'], 8, 3 * k, 12, 6 * k, 16, 14 * k];
     map.addSource('nv-done', { type: 'geojson', data: emptyLine() });
     map.addSource('nv-todo', { type: 'geojson', data: emptyLine() });
@@ -250,9 +323,9 @@
   function showMsg(icon, title, text) { $('msgIcon').textContent = icon; $('msgTitle').textContent = title; $('msgText').textContent = text; $('msg').classList.add('show'); }
 
   function faceHtml(t) {
-    // Nick: a mood takes over; otherwise their profile picture; otherwise their profile emoji
-    if (t.mood) return escH(t.mood);
+    // Nick: their profile picture is the car; no picture: their mood, else their profile emoji
     if (t.hasPhoto) return '<img src="/api/share/' + id + '/photo?v=' + t.photoV + '" alt="">';
+    if (t.mood) return escH(t.mood);
     return escH(t.emoji || '🙂');
   }
   // Where the song is now: its position when the phone last sent it, plus the time since (while playing)
@@ -271,11 +344,11 @@
     if (!me) {
       const el = document.createElement('div'); el.style.zIndex = 5;
       el.innerHTML = '<div class="me"><div class="np"><span class="tag"></span><span class="st"></span><span class="txt"></span><span class="time"></span></div>' +
-        '<div class="arrow"></div><div class="nm"></div><div class="face"></div><div class="mode">🚗</div></div>';
+        '<div class="arrow"></div><div class="live"><span class="dot"></span><span class="lt"></span></div><div class="nm"></div><div class="face"></div></div>';
       me = new mapboxgl.Marker({ element: el }).setLngLat(ll).addTo(map);
       photoV = -1;
     }
-    const faceKey = (t.mood ? 'm' + t.mood : t.hasPhoto ? 'p' + t.photoV : 'e' + (t.emoji || ''));
+    const faceKey = (t.hasPhoto ? 'p' + t.photoV : t.mood ? 'm' + t.mood : 'e' + (t.emoji || ''));
     if (photoV !== faceKey) { photoV = faceKey; me.getElement().querySelector('.face').innerHTML = faceHtml(t); }
     me.setLngLat(ll);
     const el = me.getElement();
@@ -371,7 +444,7 @@
       b.extend([data.dest.lng, data.dest.lat]);
       routePts.forEach(p => b.extend([p[1], p[0]]));
       map.fitBounds(b, { padding: { top: 250, left: 40, right: 40, bottom: 50 }, duration: 0 });
-    } else if (first) map.jumpTo({ center: [data.lng, data.lat], zoom: 15 });
+    } else if (first) map.jumpTo({ center: [data.lng, data.lat], zoom: 16.5, pitch: pitchFor(16.5) });
     else map.panTo([data.lng, data.lat], { duration: animate ? 800 : 0 });
     first = false;
   }
@@ -416,6 +489,16 @@
     const pillTime = me && me.getElement() && me.getElement().querySelector('.np .time');
     if (pillTime && m) pillTime.textContent = songTime(m);
     $('stats').style.display = t.dest && !t.endedAt ? '' : 'none';
+    // a stop on the way: its own arrival, time left and distance, then the final destination's underneath
+    const stop = !t.endedAt && t.dest && t.stop;
+    $('stopSec').style.display = stop ? 'block' : 'none';
+    if (stop) {
+      $('stopName').textContent = stop.name; $('finalName').textContent = t.dest.name;
+      $('sArrive').textContent = stop.eta ? clock(stop.eta) : '--:--';
+      $('sLeft').textContent = stop.eta ? dur((stop.eta - Date.now()) / 1000) : '--';
+      $('sDist').textContent = stop.remainingM != null ? miles(stop.remainingM) : '--';
+    }
+    drawStop(stop);
     $('progress').style.display = t.dest && !t.endedAt ? '' : 'none';
     if (t.eta) {
       $('arrive').textContent = clock(t.eta);
@@ -431,6 +514,17 @@
     else if (t.lat == null) s = 'Waiting for their location…';
     else s = (age < 45000 ? 'Live · ' : 'Signal lost · ') + 'location updated ' + ago(age);
     $('statusText').textContent = s;
+    // on the map: a small "Live · updated ..." tag above their name instead of the full-width bar
+    const tag = me && me.getElement().querySelector('.live');
+    if (tag) {
+      tag.classList.toggle('show', !t.endedAt && t.lat != null);
+      tag.querySelector('.dot').className = 'dot ' + (age < 45000 ? 'live' : age < 180000 ? 'stale' : 'lost');
+      tag.querySelector('.lt').textContent = (age < 45000 ? 'Live · updated ' : 'Signal lost · ') + ago(age);
+    }
+    $('liveBox').style.display = tag && !t.endedAt && t.lat != null ? 'none' : '';
+    // the Message button, only while they're sharing
+    $('msgBtn').style.display = !t.endedAt ? 'block' : 'none';
+    $('msgBtn').textContent = '💬 Message ' + (String(t.name || '').trim().split(/\s+/)[0] || '');
     // speed in the round dial like the app's (not in the text)
     const live = !t.endedAt && t.speed != null && age < 45000;
     $('speedo').classList.toggle('show', live);
@@ -448,7 +542,7 @@
   async function poll() {
     try {
       // w=1: this page is on screen right now, so the app can show an eye (someone's watching)
-      const r = await fetch('/api/share/' + id + (document.visibilityState === 'visible' ? '?w=1' : ''), { cache: 'no-store' });
+      const r = await fetch('/api/share/' + id + '?viewer=' + viewer + (document.visibilityState === 'visible' ? '&w=1' : ''), { cache: 'no-store' });
       if (r.status === 404) {
         showMsg('🔗', 'Nothing shared yet', "Nobody is sharing a trip on this link right now. This page will update by itself when they do.");
         $('actText').textContent = 'Not sharing right now'; $('to').textContent = ''; $('stats').style.display = 'none';
@@ -462,6 +556,8 @@
       const skew = Date.now() - data.now;
       ['updatedAt', 'endedAt', 'startedAt', 'eta'].forEach(k => { if (data[k]) data[k] += skew; });
       if (data.music && data.music.at) data.music.at += skew;
+      if (data.stop && data.stop.eta) data.stop.eta += skew;
+      (data.replies || []).forEach(showReply);
       $('msg').classList.remove('show');
       if (!data.endedAt && wasEnded) first = true;   // a new trip on the same link: zoom to it again
       wasEnded = !!data.endedAt;
@@ -492,6 +588,43 @@
     f.src = u;
   }
   const metres = (a, b) => { const k = 111320 * Math.cos(a[1] * Math.PI / 180); return Math.hypot((b[0] - a[0]) * k, (b[1] - a[1]) * 111320); };
+
+  // ---------- Send them a message (quick messages, emotes or your own words); the app shows it as a banner ----------
+  const store = { get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }, set(k, v) { try { localStorage.setItem(k, v); } catch (e) {} } };
+  let viewer = store.get('navigoViewer');
+  if (!viewer) { viewer = Math.random().toString(36).slice(2, 14); store.set('navigoViewer', viewer); }
+  const QUICK = ['How long you gonna be?', 'I love you ❤️', 'Drive safe', "I'm here", 'Call me when you can', 'Where are you?'];
+  const EMOTES = ['❤️', '😘', '👍', '😂', '👋', '🚗', '🎉', '😴'];
+  const firstName = () => String((data && data.name) || '').trim().split(/\s+/)[0] || 'them';
+  $('msgFrom').value = store.get('navigoFrom') || '';
+  QUICK.forEach(q => { const b = document.createElement('button'); b.className = 'chip'; b.textContent = q; b.onclick = () => sendMsg(q, false); $('msgQuick').append(b); });
+  EMOTES.forEach(e => { const b = document.createElement('button'); b.className = 'chip emo'; b.textContent = e; b.onclick = () => sendMsg(e, true); $('msgEmotes').append(b); });
+  $('msgBtn').onclick = () => { $('msgTitle2').textContent = 'Send ' + firstName() + ' a message'; $('msgSheet').classList.add('show'); };
+  $('msgSheet').onclick = e => { if (e.target.id === 'msgSheet') $('msgSheet').classList.remove('show'); };
+  $('msgSend').onclick = () => { const t = $('msgText').value.trim(); if (t) sendMsg(t, false); };
+  $('msgText').addEventListener('keydown', e => { if (e.key === 'Enter') $('msgSend').onclick(); });
+  function toast(text) { const t = $('replyToast'); t.textContent = text; t.classList.add('show'); clearTimeout(toast.h); toast.h = setTimeout(() => t.classList.remove('show'), 4000); }
+  async function sendMsg(text, emote) {
+    const from = $('msgFrom').value.trim();
+    if (!from) { $('msgFrom').focus(); $('msgFrom').placeholder = 'Add your name first'; return; }
+    store.set('navigoFrom', from);
+    try {
+      const r = await fetch('/api/share/' + id + '/msg', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ viewer, from, text, emote }) });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) return toast(j.error || "Couldn't send that");
+      $('msgText').value = ''; $('msgSheet').classList.remove('show');
+      toast((emote ? text + ' sent to ' : 'Sent to ') + firstName());
+    } catch (e) { toast("Couldn't send that. Try again"); }
+  }
+  // their reply: "seen it" for a message, or the same emote sent back
+  function showReply(r) {
+    if (r.kind === 'emote' && r.emote) {
+      const b = document.createElement('div'); b.className = 'burst'; b.textContent = r.text; document.body.append(b);
+      setTimeout(() => b.remove(), 3200);
+      toast(firstName() + ' sent ' + r.text + ' back');
+    } else toast('✅ ' + firstName() + ' acknowledged your message');
+  }
 
   setInterval(render, 1000);   // keep "updated x seconds ago" ticking
   if (!/^[A-Za-z0-9]{8,16}$/.test(id || '')) showMsg('🔗', 'Bad link', 'This trip link is not complete.');

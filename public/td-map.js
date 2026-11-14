@@ -24,6 +24,12 @@ window.TDMap = (function () {
     ['primary', 'primary_link', 'secondary', 'secondary_link', 'tertiary', 'tertiary_link'], C.MAIN,
     ['major_rail', 'minor_rail', 'service_rail'], '#E02424',
     ['path', 'pedestrian', 'track'], 'rgba(0,0,0,0)', C.MINOR];
+  // Fat Waze-style roads (same as the app): thin zoomed out, wide and chunky close in
+  function wazeWidth(id) {
+    const w = isMotorway(id) ? [2.5, 6.5, 20, 52] : /primary|secondary|tertiary|major/.test(id) ? [2, 5.5, 17, 46] : [0.8, 2.8, 11, 34];
+    const k = id.includes('case') ? 1.15 : 1;
+    return ['interpolate', ['exponential', 1.5], ['zoom'], 12, w[0] * k, 14, w[1] * k, 16, w[2] * k, 18, w[3] * k];
+  }
   function paint(id, prop, v) { try { map.setPaintProperty(id, prop, v); } catch (e) { /* layer doesn't have it */ } }
   function apply(m, routeShown) {
     map = m;
@@ -44,6 +50,7 @@ window.TDMap = (function () {
         else if (/landuse|landcover/.test(id)) { paint(id, 'fill-color', greenByClass); paint(id, 'fill-opacity', 1); }
         else if (/aeroway|structure|pitch/.test(id) || /^(road|bridge|tunnel)-/.test(id)) paint(id, 'fill-color', C.URBAN);
       } else if (l.type === 'line') {
+        if (isRoad(id) && !/rail|path|pedestrian|steps|track/.test(id)) paint(id, 'line-width', wazeWidth(id));
         if (id.includes('water')) paint(id, 'line-color', C.RIVER);
         else if (id.startsWith('admin')) paint(id, 'line-color', C.BORDER);
         else if (isRoad(id) && id.includes('case')) { paint(id, 'line-color', C.CASE); paint(id, 'line-opacity', 0); }
@@ -96,5 +103,39 @@ window.TDMap = (function () {
   }
   function nextLayerAfter(id) { const ls = map.getStyle().layers; const i = ls.findIndex(x => x.id === id); return ls[i + 1] ? ls[i + 1].id : undefined; }
 
-  return { apply };
+  // Live traffic like Waze (same as the app): moderate orange, heavy red, standstill dark red, each direction on its own
+  // side of the road, with darker stripes sliding along the way the traffic is going.
+  const TW = ['interpolate', ['exponential', 1.5], ['zoom'], 9, 1, 12, 1.4, 14, 3.2, 16, 9, 18, 24];
+  const TS = ['interpolate', ['exponential', 1.5], ['zoom'], 12, 1, 14, 2.2, 16, 6, 18, 16];
+  const TO = ['interpolate', ['exponential', 1.5], ['zoom'], 9, -0.5, 12, -0.8, 14, -1.8, 16, -5, 18, -13];
+  const DASH = 1.6, LEN = 4, STEPS = 24;
+  function dash(step) {
+    const sh = LEN * (step % STEPS) / STEPS;
+    if (sh + DASH <= LEN) return [0, sh, DASH, LEN - sh - DASH];
+    const d1 = sh + DASH - LEN; return [d1, sh - d1, LEN - sh, 0];
+  }
+  let trafficTimer = null;
+  function traffic(m, before) {
+    map = m;
+    try {
+      if (!map.getSource('nv-traffic')) map.addSource('nv-traffic', { type: 'vector', url: 'mapbox://mapbox.mapbox-traffic-v1' });
+      if (!map.getLayer('nv-traffic')) map.addLayer({ id: 'nv-traffic', type: 'line', source: 'nv-traffic', 'source-layer': 'traffic', minzoom: 8,
+        layout: { 'line-cap': 'round', 'line-join': 'round' },
+        paint: { 'line-color': ['match', ['get', 'congestion'], 'moderate', '#FF8C3A', 'heavy', '#E5332A', 'severe', '#A3141C', 'rgba(0,0,0,0)'],
+          'line-width': TW, 'line-offset': TO, 'line-opacity': 0.95 } }, before);
+      if (!map.getLayer('nv-traffic-anim')) map.addLayer({ id: 'nv-traffic-anim', type: 'line', source: 'nv-traffic', 'source-layer': 'traffic', minzoom: 12,
+        filter: ['match', ['get', 'congestion'], ['moderate', 'heavy', 'severe'], true, false],
+        paint: { 'line-color': ['match', ['get', 'congestion'], 'moderate', '#D65A0A', 'heavy', '#8E0F0F', 'severe', '#4A0508', 'rgba(0,0,0,0)'],
+          'line-width': TS, 'line-offset': TO, 'line-opacity': 0.85, 'line-dasharray': dash(0) } }, before);
+    } catch (e) { console.warn('traffic', e.message); return; }
+    if (trafficTimer) return;
+    let step = 0;
+    trafficTimer = setInterval(() => {
+      if (document.hidden || !map.getLayer('nv-traffic-anim') || map.getZoom() < 12) return;
+      step = (step + 1) % STEPS;
+      try { map.setPaintProperty('nv-traffic-anim', 'line-dasharray', dash(step)); } catch (e) {}
+    }, 80);
+  }
+
+  return { apply, traffic };
 })();
