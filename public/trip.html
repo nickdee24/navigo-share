@@ -120,6 +120,12 @@
       white-space: nowrap; pointer-events: none; padding: 2px 8px; border-radius: 10px; background: rgba(23,26,31,.94); border: 1px solid var(--border);
       font: 600 11px/15px system-ui, sans-serif; color: var(--text); box-shadow: 0 2px 6px rgba(0,0,0,.5); }
     .me .live.show { display: flex; }
+    /* bouncing music note on the picture while music or the radio is playing */
+    .me .note { position: absolute; right: -10px; top: -6px; width: 24px; height: 24px; border-radius: 50%; background: #1DB954; color: #fff;
+      display: none; align-items: center; justify-content: center; font: 700 15px/1 system-ui, sans-serif; box-shadow: 0 2px 6px rgba(0,0,0,.6);
+      animation: noteBounce 1s ease-in-out infinite; pointer-events: none; }
+    .me .note.show { display: flex; }
+    @keyframes noteBounce { 0%, 100% { transform: translateY(0) rotate(-8deg); } 50% { transform: translateY(-6px) rotate(8deg); } }
     .me .live .dot { width: 7px; height: 7px; }
     .me .mode { position: absolute; left: 50%; top: 52px; transform: translateX(-50%); width: 44px; height: 44px;
       display: flex; align-items: center; justify-content: center; font-size: 36px; line-height: 1;
@@ -344,7 +350,7 @@
     if (!me) {
       const el = document.createElement('div'); el.style.zIndex = 5;
       el.innerHTML = '<div class="me"><div class="np"><span class="tag"></span><span class="st"></span><span class="txt"></span><span class="time"></span></div>' +
-        '<div class="arrow"></div><div class="live"><span class="dot"></span><span class="lt"></span></div><div class="nm"></div><div class="face"></div></div>';
+        '<div class="arrow"></div><div class="live"><span class="dot"></span><span class="lt"></span></div><div class="nm"></div><div class="face"></div><div class="note">♪</div></div>';
       me = new mapboxgl.Marker({ element: el }).setLngLat(ll).addTo(map);
       photoV = -1;
     }
@@ -363,20 +369,9 @@
       if (el.querySelector('.nm').textContent !== nm) el.querySelector('.nm').textContent = nm;
       el.querySelector('.me').classList.toggle('named', !!nm);
       // what they're listening to, above the icon (the radio takes Spotify's place, like in the app)
-      const np = el.querySelector('.np'), m = t.radio ? null : t.music;
-      np.classList.toggle('show', !!(m || t.radio));
-      if (t.radio) {
-        fillRadio(np, t.radio);
-        np.querySelector('.time').textContent = '';
-        fitPill(np);
-      } else if (m) {
-        musicTag(np, m);
-        const st = np.querySelector('.st');
-        st.textContent = m.playing ? '▶' : '❚❚'; st.className = 'st' + (m.playing ? '' : ' paused');
-        np.querySelector('.txt').textContent = [m.artist, m.title].filter(Boolean).join(' – ');
-        np.querySelector('.time').textContent = songTime(m);
-        fitPill(np);
-      }
+      // music or radio playing: a little bouncing music note by their picture (the song itself is in the card)
+      const playing = !!((t.radio && t.radio.playing) || (t.music && t.music.playing));
+      el.querySelector('.note').classList.toggle('show', playing);
     }
   }
   // Radio station: its logo (or a RADIO tag), play / pause, name and genre
