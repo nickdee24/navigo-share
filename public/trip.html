@@ -277,9 +277,9 @@
   const $ = s => document.getElementById(s);
 
   // The same Mapbox map as the NaviGO app, in Truck Dash colours (td-map.js)
-  // TomTom's Orbis map in night colours with live traffic flow on the roads (the same map the app shows)
+  // TomTom's Orbis map in night colours (the same map the app shows), for location only: no traffic
   const gl = window.USE_TOMTOM ? window.maplibregl : window.mapboxgl;
-  const TT_STYLE = 'https://api.tomtom.com/maps/orbis/assets/styles/0.*/style.json?apiVersion=1&map=basic_street-dark&trafficFlow=flow_relative-dark&key='
+  const TT_STYLE = 'https://api.tomtom.com/maps/orbis/assets/styles/0.*/style.json?apiVersion=1&map=basic_street-dark&key='
     + encodeURIComponent(window.TOMTOM_KEY || '');
   if (!window.USE_TOMTOM) mapboxgl.accessToken = window.MAPBOX_TOKEN;
   const map = new gl.Map({ container: 'map', style: window.USE_TOMTOM ? TT_STYLE : 'mapbox://styles/mapbox/dark-v11', center: [-2.63, 53.55], zoom: 11,
@@ -299,7 +299,7 @@
   let mapReady = false;
   const emptyLine = () => ({ type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: [] } });
   map.on('style.load', () => {
-    // TomTom's map already has its own look and traffic colours; the Mapbox one gets NaviGO's colours and traffic
+    // TomTom's map keeps its own look (no traffic); the Mapbox one gets NaviGO's colours and traffic
     if (!window.USE_TOMTOM) TDMap.apply(map, true);
     const lbl = (map.getStyle().layers.find(l => l.type === 'symbol') || {}).id;
     if (!window.USE_TOMTOM) TDMap.traffic(map, lbl);

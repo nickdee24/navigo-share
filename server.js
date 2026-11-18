@@ -11,7 +11,7 @@ const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'data');
 const PUBLIC_DIR = path.join(__dirname, 'public');
 // Mapbox public token for the map (set MAPBOX_TOKEN in Render → Environment). Without it the page uses OpenStreetMap.
 const MAPBOX_TOKEN = process.env.MAPBOX_TOKEN || '';
-// TomTom key for the share map (the same TomTom map as the NaviGO app, with live traffic colours).
+// TomTom key for the share map (the same TomTom map as the NaviGO app; location only, no traffic).
 // Set TOMTOM_KEY in Render → Environment. Without it the page keeps the Mapbox map.
 const TOMTOM_KEY = process.env.TOMTOM_KEY || '';
 // Google Maps key for the Street View strip (Maps Embed API, free to use). Set GOOGLE_MAPS_KEY in Render → Environment.
