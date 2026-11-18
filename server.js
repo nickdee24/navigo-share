@@ -58,7 +58,7 @@ const SHARE_STALE_MS = 12 * 3600000;     // a share with no update for 12 h coun
 function pruneShares() {
   const now = Date.now();
   for (const [id, t] of Object.entries(db.shares)) {
-    if (now - (t.updatedAt || 0) > SHARE_KEEP_MS) delete db.shares[id];
+    if (now - Math.max(t.updatedAt || 0, t.eventAt || 0) > SHARE_KEEP_MS) delete db.shares[id];
     else if (!t.endedAt && now - (t.updatedAt || 0) > SHARE_STALE_MS) endShare(t, false);
   }
 }
@@ -77,7 +77,8 @@ function publicShare(t) {
     speed: t.speed, place: t.place || null, music: t.music || null,
     radio: t.radio ? Object.assign({ hasLogo: !!t.radioLogo, logoV: t.radioLogoV || 0, canListen: !!t.radioUrl }, t.radio) : null,
     mode: 'car', activity: t.activity || null, dest: t.dest, stop: t.stop || null, eta: t.eta, remainingM: t.remainingM, route: t.route, routeV: t.routeV || 0, lastDest: t.lastDest || null,
-    startedAt: t.startedAt, updatedAt: t.updatedAt, endedAt: t.endedAt || null, arrived: !!t.arrived, now: Date.now() };
+    startedAt: t.startedAt, updatedAt: t.updatedAt, endedAt: t.endedAt || null, arrived: !!t.arrived,
+    events: (t.events || []).slice(-10), now: Date.now() };
 }
 async function handleShareApi(req, res, action) {
   const b = await readJSON(req);
@@ -285,6 +286,35 @@ function listenAlong(req, res, id) {
   });
 }
 
+// ---------- link previews: title and a map picture ----------
+const escAttr = x => String(x).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+function withPreview(html, id, req) {
+  const t = db.shares[id];
+  const who = t && t.name ? t.name : 'Someone';
+  const host = 'https://' + (req.headers['x-forwarded-host'] || req.headers.host || 'navigo-share.onrender.com');
+  const live = t && !t.endedAt && t.lat != null;
+  const tags = '<meta property="og:title" content="' + escAttr(who + (live ? "'s live trip" : ' on NaviGO')) + '">' +
+    '<meta property="og:description" content="' + escAttr(live && t.dest ? 'On the way to ' + t.dest.name : 'See where they are on the map') + '">' +
+    (live && TOMTOM_KEY ? '<meta property="og:image" content="' + host + '/api/share/' + id + '/map.png">' +
+      '<meta property="og:image:width" content="600"><meta property="og:image:height" content="315"><meta name="twitter:card" content="summary_large_image">' : '');
+  return html.replace('</head>', tags + '</head>');
+}
+const mapCache = {};   // id -> { at, png }
+async function staticMap(res, id) {
+  const t = db.shares[id];
+  if (!TOMTOM_KEY || !t || t.endedAt || t.lat == null) { res.writeHead(404); return res.end(); }
+  const c = mapCache[id];
+  if (c && Date.now() - c.at < 60000) { res.writeHead(200, { 'Content-Type': 'image/png', 'Cache-Control': 'max-age=60' }); return res.end(c.png); }
+  try {
+    const r = await fetch('https://api.tomtom.com/map/1/staticimage?key=' + encodeURIComponent(TOMTOM_KEY) +
+      '&center=' + t.lng.toFixed(5) + ',' + t.lat.toFixed(5) + '&zoom=14&width=600&height=315&format=png&layer=basic&style=night&view=Unified');
+    if (!r.ok) throw new Error('status ' + r.status);
+    const png = Buffer.from(await r.arrayBuffer());
+    mapCache[id] = { at: Date.now(), png };
+    res.writeHead(200, { 'Content-Type': 'image/png', 'Cache-Control': 'max-age=60' }); res.end(png);
+  } catch (e) { res.writeHead(502); res.end(); }
+}
+
 // ---------- http ----------
 const SITE_VERSION = process.env.RENDER_GIT_COMMIT || String(Date.now());   // new on every deploy
 const MIME = { '.apk': 'application/vnd.android.package-archive', '.json': 'application/json', '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css', '.png': 'image/png', '.svg': 'image/svg+xml', '.glb': 'model/gltf-binary', '.ttf': 'font/ttf' };
@@ -339,6 +369,27 @@ const server = http.createServer(async (req, res) => {
     save();
     return json(res, 200, { ok: true });
   }
+  // Place alerts from the app ("Left home", "Nearly home", "Arrived at Asda"), shown on the page and in NaviGO Live.
+  // They come in whether or not a trip is being shared.
+  if (url.pathname === '/api/share/event' && req.method === 'POST') {
+    const b = await readJSON(req);
+    if (!b) return json(res, 400, { error: 'Bad JSON' });
+    const id = String(b.id || ''), key = String(b.key || '');
+    if (!SHARE_ID_RE.test(id) || !SHARE_KEY_RE.test(key)) return json(res, 400, { error: 'Bad id or key' });
+    let t = db.shares[id];
+    if (t && t.key !== key) return json(res, 403, { error: 'Wrong key' });
+    if (!t) t = db.shares[id] = { key, startedAt: Date.now(), endedAt: Date.now(), name: String(b.name || 'Someone').slice(0, 30) };
+    const text = String(b.text || '').trim().slice(0, 80);
+    if (!text) return json(res, 400, { error: 'No text' });
+    const ev = { id: Math.random().toString(36).slice(2, 10), text, kind: String(b.kind || '').slice(0, 20), at: Date.now() };
+    t.events = (t.events || []).concat(ev).slice(-20);
+    t.eventAt = ev.at;
+    save();
+    return json(res, 200, { ok: true, id: ev.id });
+  }
+  // A small TomTom map of where they are (Static Image API), for link previews in WhatsApp, Messages etc.
+  const shareMap = url.pathname.match(/^\/api\/share\/([A-Za-z0-9]{8,16})\/map\.png$/);
+  if (shareMap) return staticMap(res, shareMap[1]);
   const shareApi = url.pathname.match(/^\/api\/share\/(update|end)$/);
   if (shareApi && req.method === 'POST') return handleShareApi(req, res, shareApi[1]);
   const shareGet = url.pathname.match(/^\/api\/share\/([A-Za-z0-9]{8,16})$/);
@@ -378,7 +429,9 @@ const server = http.createServer(async (req, res) => {
   if (url.pathname === '/' || /^\/t\/[A-Za-z0-9]{8,16}\/?$/.test(url.pathname)) {
     return fs.readFile(path.join(PUBLIC_DIR, url.pathname === '/' ? 'index.html' : 'trip.html'), (err, data) => {
       if (err) { res.writeHead(500); return res.end(); }
-      res.writeHead(200, { 'Content-Type': MIME['.html'], 'Cache-Control': 'no-cache' }); res.end(data);
+      res.writeHead(200, { 'Content-Type': MIME['.html'], 'Cache-Control': 'no-cache' });
+      if (url.pathname === '/') return res.end(data);
+      res.end(withPreview(String(data), url.pathname.split('/')[2], req));
     });
   }
   const file = path.normalize(path.join(PUBLIC_DIR, url.pathname));

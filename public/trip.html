@@ -186,6 +186,8 @@
       background: var(--panel); border: 1.5px solid #33CCFF; border-radius: 14px; padding: 12px 18px; font-weight: 700; font-size: 16px;
       box-shadow: 0 8px 24px rgba(0,0,0,.5); transition: transform .35s; white-space: nowrap; }
     #replyToast.show { transform: translate(-50%, 0); }
+    #events .ev { display: flex; gap: 8px; padding: 3px 0; font-size: 14px; }
+    #events .ev b { color: var(--muted); font-weight: 600; min-width: 44px; }
     .burst { position: fixed; left: 50%; bottom: 20vh; z-index: 3000; font-size: 110px; transform: translateX(-50%); pointer-events: none;
       animation: burst 3s ease-out forwards; }
     @keyframes burst { 0% { opacity: 0; transform: translate(-50%, 40px) scale(.6); } 15% { opacity: 1; transform: translate(-50%, 0) scale(1); }
@@ -238,6 +240,8 @@
       <div id="listenNote"></div>
       <audio id="listenAudio" preload="none"></audio>
     </div>
+    <!-- 4. place alerts: left home, nearly home, arrived at / left named places -->
+    <div class="box" id="eventsBox" style="display:none"><div class="secT">Updates</div><div id="events"></div></div>
   </div>
 
   <button id="msgBtn">💬 Message</button>
@@ -594,6 +598,19 @@
     }
   }
 
+  // Place alerts: pop up new ones, and list the last few
+  const seenEvents = new Set(); let eventsLoaded = false;
+  const EV_ICON = { home_left: '🏠', home_near: '🏡', home_arrived: '🏠', place_arrived: '📍', place_left: '👋' };
+  function showEvents(evs) {
+    const fresh = evs.filter(e => !seenEvents.has(e.id));
+    evs.forEach(e => seenEvents.add(e.id));
+    if (eventsLoaded) fresh.forEach(e => toast((EV_ICON[e.kind] || '📍') + ' ' + (data && data.name ? data.name + ': ' : '') + e.text));
+    eventsLoaded = true;
+    const recent = evs.slice(-5).reverse();
+    $('eventsBox').style.display = recent.length ? '' : 'none';
+    $('events').innerHTML = recent.map(e => '<div class="ev"><b>' + clock(e.at + (Date.now() - data.now)) + '</b><span>' + (EV_ICON[e.kind] || '📍') + ' ' + escH(e.text) + '</span></div>').join('');
+  }
+
   async function poll() {
     try {
       // w=1: this page is on screen right now, so the app can show an eye (someone's watching)
@@ -613,6 +630,7 @@
       if (data.music && data.music.at) data.music.at += skew;
       if (data.stop && data.stop.eta) data.stop.eta += skew;
       (data.replies || []).forEach(showReply);
+      showEvents(data.events || []);
       $('msg').classList.remove('show');
       if (!data.endedAt && wasEnded) first = true;   // a new trip on the same link: zoom to it again
       wasEnded = !!data.endedAt;
