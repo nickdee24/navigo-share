@@ -10,3 +10,5 @@ services:
     envVars:
       - key: MAPBOX_TOKEN
         sync: false   # paste your Mapbox public (pk.) token in Render → Environment
+      - key: TOMTOM_KEY
+        sync: false   # TomTom key for the share map (best: a second key restricted to this site's domain)

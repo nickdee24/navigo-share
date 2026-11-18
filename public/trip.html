@@ -23,7 +23,7 @@
     body.sv #sv { display: block; }
     body.sv #map { bottom: 25vh; }
     body.sv #follow { bottom: calc(25vh + 22px); } body.sv #brand { bottom: calc(25vh + 26px); }
-    .mapboxgl-ctrl-attrib { background: rgba(13,15,18,.7) !important; }
+    .mapboxgl-ctrl-attrib, .maplibregl-ctrl-attrib { background: rgba(13,15,18,.7) !important; }
     .dark-tiles { filter: invert(1) hue-rotate(180deg) brightness(.85) contrast(.9) saturate(.4); }
 
     #card { position: fixed; left: 12px; right: 12px; top: calc(12px + env(safe-area-inset-top)); max-width: 480px; margin: 0 auto;
@@ -260,8 +260,14 @@
 
   <div id="msg"><div class="box"><div style="font-size:36px" id="msgIcon">🔗</div><h2 id="msgTitle"></h2><p id="msgText"></p></div></div>
 
-  <script src="https://api.mapbox.com/mapbox-gl-js/v3.9.0/mapbox-gl.js"></script>
   <script src="/config.js"></script>
+  <script>
+  // TomTom map (same as the NaviGO app) when the server has a TomTom key, otherwise the Mapbox one
+  window.USE_TOMTOM = !!window.TOMTOM_KEY;
+  document.write(window.USE_TOMTOM
+    ? '<link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css"><script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"><\/script>'
+    : '<script src="https://api.mapbox.com/mapbox-gl-js/v3.9.0/mapbox-gl.js"><\/script>');
+  </script>
   <script src="/td-map.js"></script>
   <script>
   'use strict';
@@ -271,8 +277,12 @@
   const $ = s => document.getElementById(s);
 
   // The same Mapbox map as the NaviGO app, in Truck Dash colours (td-map.js)
-  mapboxgl.accessToken = window.MAPBOX_TOKEN;
-  const map = new mapboxgl.Map({ container: 'map', style: 'mapbox://styles/mapbox/dark-v11', center: [-2.63, 53.55], zoom: 11,
+  // TomTom's Orbis map in night colours with live traffic flow on the roads (the same map the app shows)
+  const gl = window.USE_TOMTOM ? window.maplibregl : window.mapboxgl;
+  const TT_STYLE = 'https://api.tomtom.com/maps/orbis/assets/styles/0.*/style.json?apiVersion=1&map=basic_street-dark&trafficFlow=flow_relative-dark&key='
+    + encodeURIComponent(window.TOMTOM_KEY || '');
+  if (!window.USE_TOMTOM) mapboxgl.accessToken = window.MAPBOX_TOKEN;
+  const map = new gl.Map({ container: 'map', style: window.USE_TOMTOM ? TT_STYLE : 'mapbox://styles/mapbox/dark-v11', center: [-2.63, 53.55], zoom: 11,
     dragRotate: false, pitchWithRotate: false });
   map.touchZoomRotate.disableRotation();
   // Waze-style: zoom in and the map leans into 3D, zoom out and it flattens (flat from town level)
@@ -283,15 +293,16 @@
   let stopMark = null;
   function drawStop(s) {
     if (!s || !mapReady) { if (stopMark) { stopMark.remove(); stopMark = null; } return; }
-    if (!stopMark) { const el = document.createElement('div'); el.className = 'stopPin'; stopMark = new mapboxgl.Marker({ element: el }).setLngLat([s.lng, s.lat]).addTo(map); }
+    if (!stopMark) { const el = document.createElement('div'); el.className = 'stopPin'; stopMark = new gl.Marker({ element: el }).setLngLat([s.lng, s.lat]).addTo(map); }
     else stopMark.setLngLat([s.lng, s.lat]);
   }
   let mapReady = false;
   const emptyLine = () => ({ type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: [] } });
   map.on('style.load', () => {
-    TDMap.apply(map, true);
+    // TomTom's map already has its own look and traffic colours; the Mapbox one gets NaviGO's colours and traffic
+    if (!window.USE_TOMTOM) TDMap.apply(map, true);
     const lbl = (map.getStyle().layers.find(l => l.type === 'symbol') || {}).id;
-    TDMap.traffic(map, lbl);
+    if (!window.USE_TOMTOM) TDMap.traffic(map, lbl);
     const w = k => ['interpolate', ['exponential', 1.5], ['zoom'], 8, 3 * k, 12, 6 * k, 16, 14 * k];
     map.addSource('nv-done', { type: 'geojson', data: emptyLine() });
     map.addSource('nv-todo', { type: 'geojson', data: emptyLine() });
@@ -364,7 +375,7 @@
       const el = document.createElement('div'); el.style.zIndex = 5;
       el.innerHTML = '<div class="me"><div class="np"><span class="tag"></span><span class="st"></span><span class="txt"></span><span class="time"></span></div>' +
         '<div class="arrow"></div><div class="live"><span class="dot"></span><span class="lt"></span></div><div class="nm"></div><div class="face"></div><svg class="note" viewBox="0 0 60 50"><path d="M9 34 V27 a21 21 0 0 1 42 0 V34" fill="none" stroke="#1D2127" stroke-width="7" stroke-linecap="round"/><path d="M9 34 V27 a21 21 0 0 1 42 0 V34" fill="none" stroke="#E9EDF3" stroke-width="3.5" stroke-linecap="round"/><rect x="2" y="28" width="12" height="18" rx="5" fill="#1DB954" stroke="#fff" stroke-width="2"/><rect x="46" y="28" width="12" height="18" rx="5" fill="#1DB954" stroke="#fff" stroke-width="2"/></svg></div>';
-      me = new mapboxgl.Marker({ element: el }).setLngLat(ll).addTo(map);
+      me = new gl.Marker({ element: el }).setLngLat(ll).addTo(map);
       photoV = -1;
     }
     const faceKey = (t.hasPhoto ? 'p' + t.photoV : t.mood ? 'm' + t.mood : 'e' + (t.emoji || ''));
@@ -476,14 +487,14 @@
     if (t.dest) {
       const ll = [t.dest.lng, t.dest.lat];
       if (!flag) { const el = document.createElement('div'); el.innerHTML = flagSvg;
-        flag = new mapboxgl.Marker({ element: el, anchor: 'bottom-left', offset: [-7, 0] }).setLngLat(ll).addTo(map); }
+        flag = new gl.Marker({ element: el, anchor: 'bottom-left', offset: [-7, 0] }).setLngLat(ll).addTo(map); }
       else flag.setLngLat(ll);
     } else if (flag) { flag.remove(); flag = null; }
   }
   function centre(animate) {
     if (!data || data.lat == null) return;
     if (first && data.dest) {
-      const b = new mapboxgl.LngLatBounds([data.lng, data.lat], [data.lng, data.lat]);
+      const b = new gl.LngLatBounds([data.lng, data.lat], [data.lng, data.lat]);
       b.extend([data.dest.lng, data.dest.lat]);
       routePts.forEach(p => b.extend([p[1], p[0]]));
       map.fitBounds(b, { padding: { top: 250, left: 40, right: 40, bottom: 50 }, duration: 0 });

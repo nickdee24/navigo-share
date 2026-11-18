@@ -11,6 +11,9 @@ const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'data');
 const PUBLIC_DIR = path.join(__dirname, 'public');
 // Mapbox public token for the map (set MAPBOX_TOKEN in Render → Environment). Without it the page uses OpenStreetMap.
 const MAPBOX_TOKEN = process.env.MAPBOX_TOKEN || '';
+// TomTom key for the share map (the same TomTom map as the NaviGO app, with live traffic colours).
+// Set TOMTOM_KEY in Render → Environment. Without it the page keeps the Mapbox map.
+const TOMTOM_KEY = process.env.TOMTOM_KEY || '';
 // Google Maps key for the Street View strip (Maps Embed API, free to use). Set GOOGLE_MAPS_KEY in Render → Environment.
 const GOOGLE_MAPS_KEY = process.env.GOOGLE_MAPS_KEY || '';
 fs.mkdirSync(DATA_DIR, { recursive: true });
@@ -304,7 +307,7 @@ const server = http.createServer(async (req, res) => {
   }
   if (url.pathname === '/config.js') {
     res.writeHead(200, { 'Content-Type': MIME['.js'], 'Cache-Control': 'no-cache' });
-    return res.end('window.MAPBOX_TOKEN = ' + JSON.stringify(MAPBOX_TOKEN) + ';window.GMAPS_KEY = ' + JSON.stringify(GOOGLE_MAPS_KEY) + ';');
+    return res.end('window.MAPBOX_TOKEN = ' + JSON.stringify(MAPBOX_TOKEN) + ';window.GMAPS_KEY = ' + JSON.stringify(GOOGLE_MAPS_KEY) + ';window.TOMTOM_KEY = ' + JSON.stringify(TOMTOM_KEY) + ';');
   }
   // "Send Nick a message" from the share page: a short message or an emote, picked up by the app on its next update
   const shareMsg = url.pathname.match(/^\/api\/share\/([A-Za-z0-9]{8,16})\/msg$/);
