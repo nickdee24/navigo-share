@@ -267,7 +267,8 @@
   <script src="/config.js"></script>
   <script>
   // TomTom map (same as the NaviGO app) when the server has a TomTom key, otherwise the Mapbox one
-  window.USE_TOMTOM = !!window.TOMTOM_KEY;
+  // Nick wants the Waze-style map (same look as the app), not TomTom's: always use the Mapbox map with td-map.js colours
+  window.USE_TOMTOM = false;
   document.write(window.USE_TOMTOM
     ? '<link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css"><script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"><\/script>'
     : '<script src="https://api.mapbox.com/mapbox-gl-js/v3.9.0/mapbox-gl.js"><\/script>');
@@ -473,6 +474,7 @@
   function drawRoute(t) {
     if (!mapReady) return;
     if (t.routeV !== routeV) { routeV = t.routeV; routePts = t.route || []; }
+    if (!t.dest || t.endedAt) routePts = [];   // no drive going: no route line
     const line = c => ({ type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: c } });
     if (routePts.length > 1) {
       // Split the route where they are: driven part grey, the rest blue.

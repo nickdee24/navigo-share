@@ -125,7 +125,11 @@ async function handleShareApi(req, res, action) {
   } else t.updatedAt ||= Date.now();
   if (b.dest && isFinite(+b.dest.lat) && isFinite(+b.dest.lng)) {
     t.dest = { name: String(b.dest.name || 'Destination').slice(0, 80), lat: +b.dest.lat, lng: +b.dest.lng };
-  } else if (b.dest === null) { t.dest = null; t.route = null; }
+  } else if (b.dest === null) {
+    // drive ended: clear the route, and bump its version so open pages drop the line
+    if (t.dest || t.route) t.routeV = (t.routeV || 0) + 1;
+    t.dest = null; t.route = null;
+  }
   t.eta = num(b.eta); t.remainingM = num(b.remainingM);
   // a stop added on the way: shown as "Next stop" with its own arrival time and distance
   if (b.stop && isFinite(+b.stop.lat) && isFinite(+b.stop.lng)) {
