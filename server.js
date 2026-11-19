@@ -369,7 +369,8 @@ const server = http.createServer(async (req, res) => {
     if (!t || t.key !== String(b.key || '')) return json(res, 403, { error: 'Wrong key' });
     const m = (t.inbox || []).find(x => x.id === String(b.msgId || ''));
     if (!m) return json(res, 404, { error: 'No such message' });
-    m.reply = { kind: b.kind === 'emote' ? 'emote' : 'ack', at: Date.now() };
+    const kind = b.kind === 'emote' ? 'emote' : b.kind === 'text' ? 'text' : 'ack';
+    m.reply = { kind, at: Date.now(), text: kind === 'text' ? String(b.text || '').trim().slice(0, 200) : undefined };
     save();
     return json(res, 200, { ok: true });
   }
@@ -406,7 +407,7 @@ const server = http.createServer(async (req, res) => {
     const replies = viewer ? (t.inbox || []).filter(m => m.viewer === viewer && m.reply && !m.replyShown) : [];
     if (replies.length) { replies.forEach(m => { m.replyShown = Date.now(); }); save(); }
     return json(res, 200, Object.assign(publicShare(t), {
-      replies: replies.map(m => ({ msgId: m.id, kind: m.reply.kind, text: m.text, emote: m.emote })) }));
+      replies: replies.map(m => ({ msgId: m.id, kind: m.reply.kind, text: m.text, emote: m.emote, replyText: m.reply.text || null })) }));
   }
   const sharePhoto = url.pathname.match(/^\/api\/share\/([A-Za-z0-9]{8,16})\/photo$/);
   if (sharePhoto) {

@@ -156,6 +156,11 @@
     .stopPin { width: 26px; height: 26px; border-radius: 50%; background: #fff; border: 4px solid #3B9EFF; box-shadow: 0 2px 6px rgba(0,0,0,.6); }
     .me .face { cursor: pointer; }
     /* "Message Nick": button, sheet with ready-made messages and emotes, and the replies coming back */
+    .replyCard { position: fixed; left: 50%; top: calc(16px + env(safe-area-inset-top)); transform: translateX(-50%); z-index: 3000;
+      max-width: 88vw; background: #1D2127; color: #fff; border: 2px solid #33CCFF; border-radius: 18px; padding: 12px 18px;
+      box-shadow: 0 8px 24px rgba(0,0,0,.45); font: 600 18px/1.3 system-ui, sans-serif; animation: rcIn .35s ease-out; }
+    .replyCard b { display: block; color: #33CCFF; font-size: 14px; margin-bottom: 2px; }
+    @keyframes rcIn { from { opacity: 0; transform: translate(-50%, -20px); } to { opacity: 1; transform: translate(-50%, 0); } }
     #msgBtn { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(22px + env(safe-area-inset-bottom)); z-index: 1000; display: none;
       border: 0; border-radius: 999px; background: #33CCFF; color: #0D1B2A; font: 700 16px system-ui, sans-serif; padding: 13px 22px;
       box-shadow: 0 6px 16px rgba(0,0,0,.45); cursor: pointer; }
@@ -720,6 +725,11 @@
       const b = document.createElement('div'); b.className = 'burst'; b.textContent = r.text; document.body.append(b);
       setTimeout(() => b.remove(), 3200);
       toast(firstName() + ' sent ' + r.text + ' back');
+    } else if (r.kind === 'text' && r.replyText) {
+      // a reply they wrote (or "I love you too"): a bigger card that stays a while
+      const c = document.createElement('div'); c.className = 'replyCard';
+      const n = document.createElement('b'); n.textContent = firstName(); const tx = document.createElement('div'); tx.textContent = r.replyText;
+      c.append(n, tx); document.body.append(c); setTimeout(() => c.remove(), 12000); c.onclick = () => c.remove();
     } else toast('✅ ' + firstName() + ' acknowledged your message');
   }
 
