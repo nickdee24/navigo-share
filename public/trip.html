@@ -515,7 +515,7 @@
     $('who').textContent = t.name;
     const act = activityOf(t);
     $('actIcon').className = act; $('actIcon').innerHTML = ICONS[act];
-    $('actText').textContent = ACT_TEXT[act];
+    $('actText').textContent = ACT_TEXT[act] + (act === 'driving' && t.speed != null ? ' · ' + Math.round(t.speed * 2.23694) + ' mph' : '');
     $('moodTag').textContent = t.mood ? t.mood + (moodName ? ' ' + moodName : '') : '';
     document.title = t.name + "'s live trip";
     $('to').innerHTML = t.dest ? 'Heading to <b></b>' : '';
@@ -587,9 +587,10 @@
     $('msgBtn').style.display = !t.endedAt ? 'block' : 'none';
     $('msgBtn').textContent = '💬 Message ' + (String(t.name || '').trim().split(/\s+/)[0] || '');
     // speed in the round dial like the app's (not in the text)
-    const live = !t.endedAt && t.speed != null && age < 45000;
+    // always on while they're sharing (Nick): their latest speed, no tapping needed
+    const live = !t.endedAt && t.lat != null;
     $('speedo').classList.toggle('show', live);
-    if (live) $('speedo').querySelector('b').textContent = Math.round(t.speed * 2.23694);
+    if (live) $('speedo').querySelector('b').textContent = Math.round((t.speed || 0) * 2.23694);
     if (t.endedAt) {
       $('actText').textContent = t.arrived ? 'Arrived' : 'Not sharing right now';
       $('actIcon').className = ''; $('actIcon').innerHTML = t.arrived ? '🏁' : '🔒';
