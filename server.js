@@ -78,7 +78,7 @@ function publicShare(t) {
     radio: t.radio ? Object.assign({ hasLogo: !!t.radioLogo, logoV: t.radioLogoV || 0, canListen: !!t.radioUrl }, t.radio) : null,
     mode: 'car', activity: t.activity || null, dest: t.dest, stop: t.stop || null, eta: t.eta, remainingM: t.remainingM, route: t.route, routeV: t.routeV || 0, lastDest: t.lastDest || null,
     startedAt: t.startedAt, updatedAt: t.updatedAt, endedAt: t.endedAt || null, arrived: !!t.arrived,
-    events: (t.events || []).slice(-10), now: Date.now() };
+    events: (t.events || []).slice(-10), checkin: t.checkin || null, now: Date.now() };
 }
 async function handleShareApi(req, res, action) {
   const b = await readJSON(req);
@@ -391,6 +391,30 @@ const server = http.createServer(async (req, res) => {
     t.eventAt = ev.at;
     save();
     return json(res, 200, { ok: true, id: ev.id });
+  }
+  // Checked in at home from NaviGO's map (tap the house, Check in): the page says "Nick is at home" with a house,
+  // shared trip or not. home:false checks out (NaviGO also does that by itself when you leave home).
+  if (url.pathname === '/api/share/checkin' && req.method === 'POST') {
+    const b = await readJSON(req);
+    if (!b) return json(res, 400, { error: 'Bad JSON' });
+    const id = String(b.id || ''), key = String(b.key || '');
+    if (!SHARE_ID_RE.test(id) || !SHARE_KEY_RE.test(key)) return json(res, 400, { error: 'Bad id or key' });
+    let t = db.shares[id];
+    if (t && t.key !== key) return json(res, 403, { error: 'Wrong key' });
+    if (!t) t = db.shares[id] = { key, startedAt: Date.now(), endedAt: Date.now() };
+    t.name = String(b.name || t.name || 'Someone').slice(0, 30);
+    const lat = num(b.lat), lng = num(b.lng);
+    if (b.home && lat != null && lng != null && Math.abs(lat) <= 90 && Math.abs(lng) <= 180) {
+      const was = !!t.checkin;
+      t.checkin = { place: 'home', lat, lng, at: Date.now() };
+      if (!was) {
+        const ev = { id: Math.random().toString(36).slice(2, 10), text: 'Checked in at home', kind: 'home_checkin', at: Date.now() };
+        t.events = (t.events || []).concat(ev).slice(-20); t.eventAt = ev.at;
+      }
+    } else t.checkin = null;
+    t.eventAt = Math.max(t.eventAt || 0, Date.now());   // keeps the link remembered
+    save();
+    return json(res, 200, { ok: true });
   }
   // A small TomTom map of where they are (Static Image API), for link previews in WhatsApp, Messages etc.
   const shareMap = url.pathname.match(/^\/api\/share\/([A-Za-z0-9]{8,16})\/map\.png$/);

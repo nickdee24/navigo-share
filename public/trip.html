@@ -197,6 +197,9 @@
       animation: burst 3s ease-out forwards; }
     @keyframes burst { 0% { opacity: 0; transform: translate(-50%, 40px) scale(.6); } 15% { opacity: 1; transform: translate(-50%, 0) scale(1); }
       80% { opacity: 1; } 100% { opacity: 0; transform: translate(-50%, -45vh) scale(1.1); } }
+    .house { width: 64px; height: 64px; filter: drop-shadow(0 3px 4px rgba(0,0,0,.35)); }
+    .house .hl { position: absolute; left: 50%; bottom: 66px; transform: translateX(-50%); white-space: nowrap; background: #fff; color: #1D2127;
+      font: 800 14px system-ui, sans-serif; padding: 6px 10px; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,.25); }
     .flag { font-size: 30px; line-height: 1; filter: drop-shadow(0 2px 3px rgba(0,0,0,.6)); }
   </style>
 </head>
@@ -328,7 +331,28 @@
   const flagSvg = '<svg viewBox="0 0 34 44" width="34" height="44"><ellipse cx="7" cy="42" rx="5" ry="2" fill="rgba(0,0,0,.4)"/><line x1="7" y1="4" x2="7" y2="42" stroke="#0D0F12" stroke-width="5" stroke-linecap="round"/><line x1="7" y1="4" x2="7" y2="42" stroke="#fff" stroke-width="2.6" stroke-linecap="round"/><path d="M8 4c8-3 16 4 24 1v16c-8 3-16-4-24-1Z" fill="#FF4D4D" stroke="#fff" stroke-width="1.8" stroke-linejoin="round"/></svg>';
 
   let follow = true, first = true, wasEnded = false, data = null, routeV = -1, photoV = -1;
-  let routePts = [], me = null, flag = null;
+  let routePts = [], me = null, flag = null, house = null;
+  // Checked in at home: a cartoon house (same as NaviGO's) with "Nick is at home" above it
+  const HOUSE_SVG = '<svg viewBox="0 0 100 100" width="64" height="64"><ellipse cx="50" cy="93" rx="36" ry="5" fill="rgba(0,0,0,.2)"/>' +
+    '<rect x="64" y="14" width="11" height="22" fill="#8B5A3C" stroke="#1D2127" stroke-width="4.5"/>' +
+    '<rect x="20" y="44" width="60" height="46" rx="3" fill="#FFF1D6" stroke="#1D2127" stroke-width="4.5"/>' +
+    '<path d="M10 48 L50 12 L90 48 Z" fill="#FF5A4E" stroke="#1D2127" stroke-width="4.5" stroke-linejoin="round"/>' +
+    '<rect x="42" y="62" width="16" height="28" rx="4" fill="#33CCFF" stroke="#1D2127" stroke-width="4.5"/>' +
+    '<rect x="26" y="55" width="12" height="12" fill="#FFD43B" stroke="#1D2127" stroke-width="4.5"/>' +
+    '<rect x="62" y="55" width="12" height="12" fill="#FFD43B" stroke="#1D2127" stroke-width="4.5"/></svg>';
+  const firstOf = t => String(t.name || '').trim().split(/\s+/)[0] || 'They';
+  function drawHouse(t) {
+    const c = t.checkin;
+    if (!c) { if (house) { house.remove(); house = null; } return; }
+    if (!house) {
+      const el = document.createElement('div'); el.className = 'house'; el.style.zIndex = 6;
+      el.innerHTML = HOUSE_SVG + '<div class="hl"></div>';
+      house = new gl.Marker({ element: el, anchor: 'bottom' }).setLngLat([c.lng, c.lat]).addTo(map);
+      map.jumpTo({ center: [c.lng, c.lat], zoom: 16.5, pitch: pitchFor(16.5) });
+    }
+    house.setLngLat([c.lng, c.lat]);
+    house.getElement().querySelector('.hl').textContent = '🏠 ' + firstOf(t) + ' is at home';
+  }
 
   $('follow').onclick = () => { follow = !follow; $('follow').classList.toggle('on', follow); if (follow) centre(true); };
   map.on('dragstart', () => { follow = false; $('follow').classList.remove('on'); });
@@ -380,7 +404,7 @@
   function songTime(m) { const p = songPos(m); return p == null ? '' : mmss(p) + (m.dur ? ' / ' + mmss(m.dur) : ''); }
 
   function drawMe(t) {
-    if (t.lat == null || t.endedAt) return;
+    if (t.lat == null || t.endedAt || t.checkin) return;
     const ll = [t.lng, t.lat];
     if (!me) {
       const el = document.createElement('div'); el.style.zIndex = 5;
@@ -504,7 +528,7 @@
     } else if (flag) { flag.remove(); flag = null; }
   }
   function centre(animate) {
-    if (!data || data.lat == null) return;
+    if (!data || data.lat == null || data.checkin) return;
     if (first && data.dest) {
       const b = new gl.LngLatBounds([data.lng, data.lat], [data.lng, data.lat]);
       b.extend([data.dest.lng, data.dest.lat]);
@@ -605,11 +629,23 @@
       if (t.arrived && t.lastDest) $('to').querySelector('b').textContent = t.lastDest;
       if (me) { me.remove(); me = null; }
     }
+    // checked in at home: the house says it all (the car icon steps aside)
+    if (t.checkin) {
+      $('actIcon').className = ''; $('actIcon').innerHTML = '🏠';
+      $('actText').textContent = firstOf(t) + ' is at home';
+      $('to').textContent = 'Checked in at ' + clock(t.checkin.at);
+      $('where').textContent = '';
+      $('placeBox').classList.remove('empty');
+      $('speedo').classList.remove('show');
+      $('statusText').textContent = '🏠 At home · checked in ' + ago(Date.now() - t.checkin.at);
+      $('dot').className = 'dot live';
+      if (me) { me.remove(); me = null; }
+    }
   }
 
   // Place alerts: pop up new ones, and list the last few
   const seenEvents = new Set(); let eventsLoaded = false;
-  const EV_ICON = { home_left: '🏠', home_near: '🏡', home_arrived: '🏠', place_arrived: '📍', place_left: '👋' };
+  const EV_ICON = { home_checkin: '🏠', home_left: '🏠', home_near: '🏡', home_arrived: '🏠', place_arrived: '📍', place_left: '👋' };
   function showEvents(evs) {
     const fresh = evs.filter(e => !seenEvents.has(e.id));
     evs.forEach(e => seenEvents.add(e.id));
@@ -636,6 +672,7 @@
       // clock difference between this device and the server, so "updated x ago" is right
       const skew = Date.now() - data.now;
       ['updatedAt', 'endedAt', 'startedAt', 'eta'].forEach(k => { if (data[k]) data[k] += skew; });
+      if (data.checkin && data.checkin.at) data.checkin.at += skew;
       if (data.music && data.music.at) data.music.at += skew;
       if (data.stop && data.stop.eta) data.stop.eta += skew;
       (data.replies || []).forEach(showReply);
@@ -643,7 +680,7 @@
       $('msg').classList.remove('show');
       if (!data.endedAt && wasEnded) first = true;   // a new trip on the same link: zoom to it again
       wasEnded = !!data.endedAt;
-      drawRoute(data); drawMe(data); streetView(data);
+      drawRoute(data); drawMe(data); drawHouse(data); streetView(data);
       if (follow || first) centre(true);
       render();
     } catch (e) {
