@@ -122,7 +122,7 @@ async function handleShareApi(req, res, action) {
   if (lat != null && lng != null && Math.abs(lat) <= 90 && Math.abs(lng) <= 180) {
     t.lat = lat; t.lng = lng; t.heading = num(b.heading); t.speed = num(b.speed); t.updatedAt = Date.now();
     updatePlace(t);
-  } else t.updatedAt ||= Date.now();
+  } else t.updatedAt = Date.now();   // an update with no position (no GPS yet) still means NaviGO is sharing: keep the last place
   if (b.dest && isFinite(+b.dest.lat) && isFinite(+b.dest.lng)) {
     t.dest = { name: String(b.dest.name || 'Destination').slice(0, 80), lat: +b.dest.lat, lng: +b.dest.lng };
   } else if (b.dest === null) {
