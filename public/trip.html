@@ -272,8 +272,8 @@
   <script src="/config.js"></script>
   <script>
   // TomTom map (same as the NaviGO app) when the server has a TomTom key, otherwise the Mapbox one
-  // Nick wants the Waze-style map (same look as the app), not TomTom's: always use the Mapbox map with td-map.js colours
-  window.USE_TOMTOM = false;
+  // Nick wants the TomTom look again (2026-11-20), same as the app
+  window.USE_TOMTOM = !!window.TOMTOM_KEY;
   document.write(window.USE_TOMTOM
     ? '<link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css"><script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"><\/script>'
     : '<script src="https://api.mapbox.com/mapbox-gl-js/v3.9.0/mapbox-gl.js"><\/script>');
