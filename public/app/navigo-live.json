@@ -1,6 +1,6 @@
 {
-  "versionCode": 5,
-  "versionName": "1.4",
+  "versionCode": 6,
+  "versionName": "1.5",
   "url": "https://navigo-share.onrender.com/app/navigo-live.apk",
-  "notes": "Place alerts as notifications: left home, nearly home, and arriving at or leaving places, even with NaviGO Live closed."
+  "notes": "Arrived at / Left alerts when Nick checks in at places, and a reminder to turn notifications on so you don't miss them."
 }

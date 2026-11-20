@@ -404,14 +404,21 @@ const server = http.createServer(async (req, res) => {
     if (!t) t = db.shares[id] = { key, startedAt: Date.now(), endedAt: Date.now() };
     t.name = String(b.name || t.name || 'Someone').slice(0, 30);
     const lat = num(b.lat), lng = num(b.lng);
-    if (b.home && lat != null && lng != null && Math.abs(lat) <= 90 && Math.abs(lng) <= 180) {
-      const was = !!t.checkin;
-      t.checkin = { place: 'home', lat, lng, at: Date.now() };
-      if (!was) {
-        const ev = { id: Math.random().toString(36).slice(2, 10), text: 'Checked in at home', kind: 'home_checkin', at: Date.now() };
-        t.events = (t.events || []).concat(ev).slice(-20); t.eventAt = ev.at;
-      }
-    } else t.checkin = null;
+    const home = !!b.home, place = home ? 'home' : String(b.place || '').trim().slice(0, 60);
+    const addEvent = (text, kind) => {
+      const ev = { id: Math.random().toString(36).slice(2, 10), text, kind, at: Date.now() };
+      t.events = (t.events || []).concat(ev).slice(-20); t.eventAt = ev.at;
+    };
+    if (!b.out && place && lat != null && lng != null && Math.abs(lat) <= 90 && Math.abs(lng) <= 180) {
+      const same = t.checkin && t.checkin.place === place;
+      t.checkin = { place, lat, lng, at: same ? t.checkin.at : Date.now() };
+      // "Arrived at Asda" for NaviGO Live's notifications (home has its own "Arrived home" / "Left home")
+      if (!same) addEvent(home ? 'Checked in at home' : 'Arrived at ' + place, home ? 'home_checkin' : 'place_arrived');
+    } else {
+      // checked out: "Left Asda"
+      if (t.checkin && t.checkin.place !== 'home') addEvent('Left ' + t.checkin.place, 'place_left');
+      t.checkin = null;
+    }
     t.eventAt = Math.max(t.eventAt || 0, Date.now());   // keeps the link remembered
     save();
     return json(res, 200, { ok: true });

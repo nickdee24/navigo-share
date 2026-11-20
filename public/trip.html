@@ -341,6 +341,7 @@
     '<rect x="26" y="55" width="12" height="12" fill="#FFD43B" stroke="#1D2127" stroke-width="4.5"/>' +
     '<rect x="62" y="55" width="12" height="12" fill="#FFD43B" stroke="#1D2127" stroke-width="4.5"/></svg>';
   const firstOf = t => String(t.name || '').trim().split(/\s+/)[0] || 'They';
+  const atText = t => firstOf(t) + ' is at ' + (t.checkin.place === 'home' ? 'home' : t.checkin.place);
   function drawHouse(t) {
     const c = t.checkin;
     if (!c) { if (house) { house.remove(); house = null; } return; }
@@ -351,7 +352,13 @@
       map.jumpTo({ center: [c.lng, c.lat], zoom: 16.5, pitch: pitchFor(16.5) });
     }
     house.setLngLat([c.lng, c.lat]);
-    house.getElement().querySelector('.hl').textContent = '🏠 ' + firstOf(t) + ' is at home';
+    const isHome = c.place === 'home';
+    const el = house.getElement();
+    if (el.dataset.kind !== (isHome ? 'home' : 'pin')) {
+      el.dataset.kind = isHome ? 'home' : 'pin';
+      el.innerHTML = (isHome ? HOUSE_SVG : '<div style="font-size:46px;line-height:64px;text-align:center">📍</div>') + '<div class="hl"></div>';
+    }
+    el.querySelector('.hl').textContent = (isHome ? '🏠 ' : '📍 ') + atText(t);
   }
 
   $('follow').onclick = () => { follow = !follow; $('follow').classList.toggle('on', follow); if (follow) centre(true); };
@@ -631,13 +638,13 @@
     }
     // checked in at home: the house says it all (the car icon steps aside)
     if (t.checkin) {
-      $('actIcon').className = ''; $('actIcon').innerHTML = '🏠';
-      $('actText').textContent = firstOf(t) + ' is at home';
+      $('actIcon').className = ''; $('actIcon').innerHTML = t.checkin.place === 'home' ? '🏠' : '📍';
+      $('actText').textContent = atText(t);
       $('to').textContent = 'Checked in at ' + clock(t.checkin.at);
       $('where').textContent = '';
       $('placeBox').classList.remove('empty');
       $('speedo').classList.remove('show');
-      $('statusText').textContent = '🏠 At home · checked in ' + ago(Date.now() - t.checkin.at);
+      $('statusText').textContent = (t.checkin.place === 'home' ? '🏠 At home' : '📍 At ' + t.checkin.place) + ' · checked in ' + ago(Date.now() - t.checkin.at);
       $('dot').className = 'dot live';
       if (me) { me.remove(); me = null; }
     }
