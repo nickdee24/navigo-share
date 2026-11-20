@@ -352,13 +352,14 @@
   const ICONS = {
     driving: '<svg viewBox="0 0 28 28" fill="none" stroke="#3B9EFF" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 18v-4l3-1 3-5h10l3 5 3 1v4"/><path d="M3 18h3m5 0h6m5 0h3"/><circle cx="8.5" cy="18.5" r="2.5"/><circle cx="19.5" cy="18.5" r="2.5"/></svg>',
     stopped: '<svg viewBox="0 0 28 28" fill="none" stroke="#9AA4B2" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 18v-4l3-1 3-5h10l3 5 3 1v4"/><path d="M3 18h3m5 0h6m5 0h3"/><circle cx="8.5" cy="18.5" r="2.5"/><circle cx="19.5" cy="18.5" r="2.5"/></svg>',
+    walking: '<svg viewBox="0 0 28 28" fill="none" stroke="#33CCFF" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="15" cy="5" r="2.2"/><path d="M12 25l2.5-7 3 3v4"/><path d="M10 14l3-4 4 2 2 4"/><path d="M13 10l1.5 8"/></svg>',
   };
-  // Driving / Not moving. Older app versions don't send it: work it out from the speed.
+  // Driving / Walking (app closed) / Not moving. Older app versions don't send it: work it out from the speed.
   function activityOf(t) {
-    if (t.activity === 'driving' || t.activity === 'stopped') return t.activity;
+    if (t.activity === 'driving' || t.activity === 'stopped' || t.activity === 'walking') return t.activity;
     return t.speed != null && t.speed > 1.5 ? 'driving' : 'stopped';
   }
-  const ACT_TEXT = { driving: 'Driving', stopped: 'Not moving' };
+  const ACT_TEXT = { driving: 'Driving', stopped: 'Not moving', walking: 'Walking' };
 
   function showMsg(icon, title, text) { $('msgIcon').textContent = icon; $('msgTitle').textContent = title; $('msgText').textContent = text; $('msg').classList.add('show'); }
 

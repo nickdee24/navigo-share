@@ -117,7 +117,7 @@ async function handleShareApi(req, res, action) {
     }
   } else if (b.radio !== undefined) { t.radio = null; t.radioLogo = null; t.radioUrl = null; }
   // NaviGO is car only: driving or stopped
-  if (b.activity !== undefined) t.activity = ['driving', 'stopped'].includes(b.activity) ? b.activity : null;
+  if (b.activity !== undefined) t.activity = ['driving', 'stopped', 'walking'].includes(b.activity) ? b.activity : null;
   const lat = num(b.lat), lng = num(b.lng);
   if (lat != null && lng != null && Math.abs(lat) <= 90 && Math.abs(lng) <= 180) {
     t.lat = lat; t.lng = lng; t.heading = num(b.heading); t.speed = num(b.speed); t.updatedAt = Date.now();
