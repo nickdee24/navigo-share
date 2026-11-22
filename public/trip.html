@@ -60,9 +60,9 @@
     #song .txt { white-space: normal; overflow-wrap: anywhere; min-width: 0; line-height: 1.3; }
     #song .tag, #song .st { margin-top: 1px; }
     #song .time { flex: none; margin-left: auto; padding-left: 6px; color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
-    #listenBtn { display: none; margin-top: 9px; width: 100%; padding: 9px 12px; border: 0; border-radius: 10px; background: var(--accent); color: #fff; font: inherit; font-size: 14px; font-weight: 700; cursor: pointer; }
-    #listenBtn.show { display: block; }
-    #listenBtn.on { background: var(--alt); color: var(--text); }
+    #listenBtn, #previewBtn { display: none; margin-top: 9px; width: 100%; padding: 9px 12px; border: 0; border-radius: 10px; background: var(--accent); color: #fff; font: inherit; font-size: 14px; font-weight: 700; cursor: pointer; }
+    #listenBtn.show, #previewBtn.show { display: block; }
+    #listenBtn.on, #previewBtn.on { background: var(--alt); color: var(--text); }
     #listenNote { display: none; margin-top: 5px; font-size: 12px; color: var(--muted); }
     #listenNote.show { display: block; }
     #songBar { display: none; height: 3px; margin-top: 5px; background: #2F343C; border-radius: 2px; overflow: hidden; }
@@ -245,6 +245,7 @@
       <div id="song"><span class="tag"></span><span class="st"></span><span class="txt"></span><span class="time"></span></div>
       <div id="songBar"><div></div></div>
       <button id="listenBtn" type="button">🎧 Listen along</button>
+      <button id="previewBtn" type="button">🎧 Hear a preview of this song</button>
       <div id="listenNote"></div>
       <audio id="listenAudio" preload="none"></audio>
     </div>
@@ -487,7 +488,35 @@
     else listenNote('Paused, it carries on when the radio does.');
     updateListen(data && !data.endedAt ? data.radio : null);
   };
-  $('listenAudio').addEventListener('playing', () => listenNote('Listening live to ' + listenStation + ', a few seconds behind.'));
+  $('listenAudio').addEventListener('playing', () => { if (listenStation) listenNote('Listening live to ' + listenStation + ', a few seconds behind.'); });
+  // Spotify / YouTube Music: a 30-second preview of the song they're playing (Deezer's free previews, found by our server)
+  let previewOn = false, previewKey = null;
+  async function playPreview(m) {
+    const key = m.artist + '|' + m.title; previewKey = key;
+    listenNote('Finding a preview of ' + m.title + '…');
+    try {
+      const r = await fetch('/api/share/' + id + '/preview', { cache: 'no-store' });
+      if (!r.ok) throw new Error(r.status);
+      const j = await r.json();
+      if (previewKey !== key || !previewOn) return;
+      const a = $('listenAudio'); a.src = j.url; a.play().catch(() => {});
+      listenNote('Playing a 30-second preview of ' + j.title + ' by ' + j.artist + '. It changes when their song does.');
+    } catch (e) { if (previewKey === key) listenNote("Couldn't find a preview of this song."); }
+  }
+  function updatePreview(m) {
+    const b = $('previewBtn'), can = !!(m && m.title) && !listening;
+    b.classList.toggle('show', can || previewOn);
+    if (!m || !m.title) { if (previewOn) { previewOn = false; previewKey = null; stopListen('The music has stopped.'); } }
+    else if (previewOn && previewKey !== m.artist + '|' + m.title) playPreview(m);   // they moved on to another song
+    b.classList.toggle('on', previewOn);
+    b.textContent = previewOn ? '■ Stop preview' : '🎧 Hear a preview of this song';
+  }
+  $('previewBtn').onclick = () => {
+    previewOn = !previewOn;
+    if (!previewOn) { previewKey = null; stopListen(); } else if (data && data.music) playPreview(data.music);
+    updatePreview(data && !data.endedAt && !data.radio ? data.music : null);
+  };
+  $('listenAudio').addEventListener('ended', () => { if (previewOn) listenNote('That was the 30-second preview. Press Stop, or wait for their next song.'); });
   $('listenAudio').addEventListener('error', () => { if (listening && listenStation) { listenStation = null; listenFailAt = Date.now(); listenNote("Couldn't play this station here. Try again in a bit."); } });
 
   // Music app tag (Spotify / YouTube Music); swaps back from a radio logo if needed
@@ -579,6 +608,7 @@
       song.querySelector('.time').textContent = songTime(m);
     }
     updateListen(radio);
+    updatePreview(m || null);
     const bar = $('songBar'), p = m ? songPos(m) : null;
     bar.classList.toggle('show', !!(m && p != null && m.dur));
     if (m) bar.className = (m && p != null && m.dur ? 'show ' : '') + (m.player || '').toLowerCase();

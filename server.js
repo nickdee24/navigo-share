@@ -51,6 +51,7 @@ function cleanRoute(r) {
 // says you're not sharing and shows no location. Kept in memory (and state.json); after a server restart the
 // phone's next update recreates it.
 db.shares ||= {};
+let previewCache = null;   // song -> Deezer preview (see /api/share/:id/preview)
 const SHARE_ID_RE = /^[A-Za-z0-9]{8,16}$/;
 const SHARE_KEY_RE = /^[a-f0-9]{24,48}$/;
 const SHARE_KEEP_MS = 30 * 86400000;     // forget a link nobody has used for 30 days
@@ -391,6 +392,33 @@ const server = http.createServer(async (req, res) => {
     t.eventAt = ev.at;
     save();
     return json(res, 200, { ok: true, id: ev.id });
+  }
+  // 30-second preview of the song they're playing on Spotify / YouTube Music (Deezer's free previews; no key)
+  const sharePreview = url.pathname.match(/^\/api\/share\/([A-Za-z0-9]{8,16})\/preview$/);
+  if (sharePreview) {
+    const t = db.shares[sharePreview[1]];
+    const m = t && !t.endedAt && t.music;
+    if (!m || !m.title) return json(res, 404, { error: 'No song playing' });
+    const key = (m.artist || '') + '|' + m.title;
+    previewCache ||= new Map();
+    let hit = previewCache.get(key);
+    if (hit && Date.now() - hit.at > 600000) hit = null;   // Deezer's preview links stop working after ~15 min
+    if (!hit) {
+      try {
+        const q = encodeURIComponent(((m.artist || '') + ' ' + m.title).trim());
+        const r = await fetch('https://api.deezer.com/search?limit=8&q=' + q);
+        const list = (await r.json()).data || [];
+        const norm = s => String(s || '').toLowerCase().replace(/\(.*?\)|\[.*?\]|feat\..*$|[^a-z0-9 ]/g, '').trim();
+        const want = norm(m.title), who = norm(m.artist);
+        const best = list.find(x => x.preview && norm(x.title).startsWith(want) && (!who || norm(x.artist && x.artist.name).includes(who.split(' ')[0])))
+          || list.find(x => x.preview && norm(x.title).startsWith(want)) || null;
+        hit = best ? { url: best.preview, title: best.title, artist: best.artist ? best.artist.name : '', at: Date.now() } : { none: true, at: Date.now() };
+      } catch (e) { return json(res, 502, { error: 'Preview search failed' }); }
+      previewCache.set(key, hit);
+      if (previewCache.size > 300) previewCache.delete(previewCache.keys().next().value);
+    }
+    if (hit.none) return json(res, 404, { error: 'No preview for this song' });
+    return json(res, 200, { url: hit.url, title: hit.title, artist: hit.artist });
   }
   // "Clear updates" in NaviGO's settings: empties the Updates list (place alerts, check-ins) on the share page
   if (url.pathname === '/api/share/clear' && req.method === 'POST') {
