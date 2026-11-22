@@ -392,6 +392,17 @@ const server = http.createServer(async (req, res) => {
     save();
     return json(res, 200, { ok: true, id: ev.id });
   }
+  // "Clear updates" in NaviGO's settings: empties the Updates list (place alerts, check-ins) on the share page
+  if (url.pathname === '/api/share/clear' && req.method === 'POST') {
+    const b = await readJSON(req);
+    if (!b) return json(res, 400, { error: 'Bad JSON' });
+    const id = String(b.id || ''), key = String(b.key || '');
+    if (!SHARE_ID_RE.test(id) || !SHARE_KEY_RE.test(key)) return json(res, 400, { error: 'Bad id or key' });
+    const t = db.shares[id];
+    if (t && t.key !== key) return json(res, 403, { error: 'Wrong key' });
+    if (t) { t.events = []; save(); }
+    return json(res, 200, { ok: true });
+  }
   // Checked in at home from NaviGO's map (tap the house, Check in): the page says "Nick is at home" with a house,
   // shared trip or not. home:false checks out (NaviGO also does that by itself when you leave home).
   if (url.pathname === '/api/share/checkin' && req.method === 'POST') {
