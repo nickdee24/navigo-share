@@ -645,7 +645,8 @@
       song.querySelector('.time').textContent = songTime(m);
     }
     updateListen(radio);
-    updatePreview(m || null);
+    // (Spotify adverts don't get a Listen along button)
+    updatePreview(m && !/advert/i.test((m.artist || '') + ' ' + (m.title || '')) ? m : null);
     const bar = $('songBar'), p = m ? songPos(m) : null;
     bar.classList.toggle('show', !!(m && p != null && m.dur));
     if (m) bar.className = (m && p != null && m.dur ? 'show ' : '') + (m.player || '').toLowerCase();
