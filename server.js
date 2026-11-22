@@ -51,7 +51,7 @@ function cleanRoute(r) {
 // says you're not sharing and shows no location. Kept in memory (and state.json); after a server restart the
 // phone's next update recreates it.
 db.shares ||= {};
-let previewCache = null;   // song -> Deezer preview (see /api/share/:id/preview)
+let previewCache = null, ytCache = null;   // song -> Deezer preview (see /api/share/:id/preview)
 const SHARE_ID_RE = /^[A-Za-z0-9]{8,16}$/;
 const SHARE_KEY_RE = /^[a-f0-9]{24,48}$/;
 const SHARE_KEEP_MS = 30 * 86400000;     // forget a link nobody has used for 30 days
@@ -392,6 +392,37 @@ const server = http.createServer(async (req, res) => {
     t.eventAt = ev.at;
     save();
     return json(res, 200, { ok: true, id: ev.id });
+  }
+  // The song they're playing, found on YouTube, so the page can play it in time with them (YouTube Data API v3:
+  // YOUTUBE_KEY, or the Google Maps key once 'YouTube Data API v3' is switched on for it in Google Cloud)
+  const shareYt = url.pathname.match(/^\/api\/share\/([A-Za-z0-9]{8,16})\/youtube$/);
+  if (shareYt) {
+    const t = db.shares[shareYt[1]];
+    const m = t && !t.endedAt && t.music;
+    if (!m || !m.title) return json(res, 404, { error: 'No song playing' });
+    const ytKey = process.env.YOUTUBE_KEY || GOOGLE_MAPS_KEY;
+    if (!ytKey) return json(res, 503, { error: 'No YouTube key' });
+    const key = (m.artist || '') + '|' + m.title;
+    ytCache ||= new Map();
+    let hit = ytCache.get(key);
+    if (hit && Date.now() - hit.at > 86400000) hit = null;
+    if (!hit) {
+      try {
+        const q = encodeURIComponent(((m.artist || '') + ' ' + m.title + ' audio').trim());
+        const r = await fetch('https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&videoEmbeddable=true&maxResults=8&videoCategoryId=10&q=' + q + '&key=' + encodeURIComponent(ytKey),
+          { headers: { Referer: 'https://navigo-share.onrender.com/' } });
+        const j = await r.json();
+        if (j.error) { console.log('YouTube search:', j.error.message); return json(res, 503, { error: 'YouTube search not available' }); }
+        const items = (j.items || []).filter(x => x.id && x.id.videoId);
+        // the plain album audio ("Artist - Topic" channels) lines up with Spotify best: no video intros
+        const best = items.find(x => /- Topic$/.test(x.snippet.channelTitle)) || items.find(x => /official audio/i.test(x.snippet.title)) || items[0];
+        hit = best ? { videoId: best.id.videoId, title: best.snippet.title, at: Date.now() } : { none: true, at: Date.now() };
+      } catch (e) { return json(res, 502, { error: 'YouTube search failed' }); }
+      ytCache.set(key, hit);
+      if (ytCache.size > 300) ytCache.delete(ytCache.keys().next().value);
+    }
+    if (hit.none) return json(res, 404, { error: 'Not found on YouTube' });
+    return json(res, 200, { videoId: hit.videoId, title: hit.title });
   }
   // 30-second preview of the song they're playing on Spotify / YouTube Music (Deezer's free previews; no key)
   const sharePreview = url.pathname.match(/^\/api\/share\/([A-Za-z0-9]{8,16})\/preview$/);

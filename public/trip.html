@@ -245,9 +245,10 @@
       <div id="song"><span class="tag"></span><span class="st"></span><span class="txt"></span><span class="time"></span></div>
       <div id="songBar"><div></div></div>
       <button id="listenBtn" type="button">🎧 Listen along</button>
-      <button id="previewBtn" type="button">🎧 Hear a preview of this song</button>
+      <button id="previewBtn" type="button">🎧 Listen along</button>
       <div id="listenNote"></div>
       <audio id="listenAudio" preload="none"></audio>
+      <div id="ytWrap" style="display:none;margin-top:8px;border-radius:10px;overflow:hidden;width:200px;height:113px"><div id="ytBox"></div></div>
     </div>
     <!-- 4. place alerts: left home, nearly home, arrived at / left named places -->
     <div class="box" id="eventsBox" style="display:none"><div class="secT">Updates</div><div id="events"></div></div>
@@ -491,9 +492,45 @@
   $('listenAudio').addEventListener('playing', () => { if (listenStation) listenNote('Listening live to ' + listenStation + ', a few seconds behind.'); });
   // Spotify / YouTube Music: a 30-second preview of the song they're playing (Deezer's free previews, found by our server)
   let previewOn = false, previewKey = null;
+  // ---- YouTube, in time with them (falls back to the 30-second preview if YouTube isn't available) ----
+  let yt = null, ytReady = null, ytMode = false;
+  function loadYt() {
+    if (ytReady) return ytReady;
+    ytReady = new Promise(res => { window.onYouTubeIframeAPIReady = res; const s = document.createElement('script'); s.src = 'https://www.youtube.com/iframe_api'; document.head.appendChild(s); });
+    return ytReady;
+  }
+  const nowSec = () => { const m = data && data.music; const p = m ? songPos(m) : null; return p == null ? 0 : p / 1000; };
+  async function playYoutube(m, key) {
+    const r = await fetch('/api/share/' + id + '/youtube', { cache: 'no-store' });
+    if (!r.ok) return false;
+    const j = await r.json();
+    if (previewKey !== key || !previewOn) return true;
+    await loadYt();
+    $('ytWrap').style.display = '';
+    ytMode = true;
+    if (!yt) {
+      yt = new YT.Player('ytBox', { width: 200, height: 113, videoId: j.videoId,
+        playerVars: { autoplay: 1, playsinline: 1, controls: 0, start: Math.floor(nowSec()) },
+        events: { onReady: e => { e.target.seekTo(nowSec(), true); e.target.playVideo(); } } });
+    } else yt.loadVideoById({ videoId: j.videoId, startSeconds: nowSec() });
+    listenNote('Playing ' + m.title + ' from YouTube, in time with ' + firstOf(data) + '.');
+    return true;
+  }
+  // keep YouTube in step: same place in the song, paused when they pause
+  setInterval(() => {
+    if (!previewOn || !ytMode || !yt || !yt.getCurrentTime || !data || !data.music) return;
+    const m = data.music;
+    if (!m.playing) { if (yt.getPlayerState() === 1) yt.pauseVideo(); return; }
+    if (yt.getPlayerState() !== 1) yt.playVideo();
+    if (Math.abs(yt.getCurrentTime() - nowSec()) > 2.5) yt.seekTo(nowSec(), true);
+  }, 3000);
+  function stopYoutube() { ytMode = false; if (yt && yt.stopVideo) yt.stopVideo(); $('ytWrap').style.display = 'none'; }
+
   async function playPreview(m) {
     const key = m.artist + '|' + m.title; previewKey = key;
-    listenNote('Finding a preview of ' + m.title + '…');
+    listenNote('Finding ' + m.title + '…');
+    try { if (await playYoutube(m, key)) return; } catch (e) {}
+    stopYoutube();
     try {
       const r = await fetch('/api/share/' + id + '/preview', { cache: 'no-store' });
       if (!r.ok) throw new Error(r.status);
@@ -506,14 +543,14 @@
   function updatePreview(m) {
     const b = $('previewBtn'), can = !!(m && m.title) && !listening;
     b.classList.toggle('show', can || previewOn);
-    if (!m || !m.title) { if (previewOn) { previewOn = false; previewKey = null; stopListen('The music has stopped.'); } }
+    if (!m || !m.title) { if (previewOn) { previewOn = false; previewKey = null; stopYoutube(); stopListen('The music has stopped.'); } }
     else if (previewOn && previewKey !== m.artist + '|' + m.title) playPreview(m);   // they moved on to another song
     b.classList.toggle('on', previewOn);
-    b.textContent = previewOn ? '■ Stop preview' : '🎧 Hear a preview of this song';
+    b.textContent = previewOn ? '■ Stop listening' : '🎧 Listen along';
   }
   $('previewBtn').onclick = () => {
     previewOn = !previewOn;
-    if (!previewOn) { previewKey = null; stopListen(); } else if (data && data.music) playPreview(data.music);
+    if (!previewOn) { previewKey = null; stopYoutube(); stopListen(); } else if (data && data.music) playPreview(data.music);
     updatePreview(data && !data.endedAt && !data.radio ? data.music : null);
   };
   $('listenAudio').addEventListener('ended', () => { if (previewOn) listenNote('That was the 30-second preview. Press Stop, or wait for their next song.'); });
