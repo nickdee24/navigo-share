@@ -300,8 +300,14 @@
   const TT_STYLE = 'https://api.tomtom.com/maps/orbis/assets/styles/0.*/style.json?apiVersion=1&map=basic_street-dark&key='
     + encodeURIComponent(window.TOMTOM_KEY || '');
   if (!window.USE_TOMTOM) mapboxgl.accessToken = window.MAPBOX_TOKEN;
+  // road and place names in Rubik, like NaviGO's Boing (Nick, 23 Nov): every font the map asks for comes from /glyphs/Rubik
+  const rubikGlyphs = (url, type) => {
+    if (type !== 'Glyphs') return { url };
+    const r = url.match(/(\d+-\d+)\.pbf/);
+    return r ? { url: location.origin + '/glyphs/Rubik/' + r[1] + '.pbf' } : { url };
+  };
   const map = new gl.Map({ container: 'map', style: window.USE_TOMTOM ? TT_STYLE : 'mapbox://styles/mapbox/dark-v11', center: [-2.63, 53.55], zoom: 11,
-    dragRotate: false, pitchWithRotate: false });
+    dragRotate: false, pitchWithRotate: false, transformRequest: rubikGlyphs });
   map.touchZoomRotate.disableRotation();
   // Waze-style: zoom in and the map leans into 3D, zoom out and it flattens (flat from town level)
   const pitchFor = z => z >= 17 ? 58 : z <= 13 ? 0 : (z - 13) / 4 * 58;
@@ -321,6 +327,13 @@
     if (!window.USE_TOMTOM) TDMap.apply(map, true);
     const lbl = (map.getStyle().layers.find(l => l.type === 'symbol') || {}).id;
     if (!window.USE_TOMTOM) TDMap.traffic(map, lbl);
+    // 3D buildings, like NaviGO (OpenFreeMap's building heights, raised as blocks from zoom 15)
+    if (!map.getSource('nv-bld')) {
+      map.addSource('nv-bld', { type: 'vector', url: 'https://tiles.openfreemap.org/planet' });
+      map.addLayer({ id: 'nv-bld-3d', type: 'fill-extrusion', source: 'nv-bld', 'source-layer': 'building', minzoom: 15,
+        paint: { 'fill-extrusion-color': '#3A4150', 'fill-extrusion-opacity': 0.8,
+          'fill-extrusion-height': ['coalesce', ['get', 'render_height'], 6], 'fill-extrusion-base': ['coalesce', ['get', 'render_min_height'], 0] } }, lbl);
+    }
     const w = k => ['interpolate', ['exponential', 1.5], ['zoom'], 8, 3 * k, 12, 6 * k, 16, 14 * k];
     map.addSource('nv-done', { type: 'geojson', data: emptyLine() });
     map.addSource('nv-todo', { type: 'geojson', data: emptyLine() });

@@ -322,7 +322,7 @@ async function staticMap(res, id) {
 
 // ---------- http ----------
 const SITE_VERSION = process.env.RENDER_GIT_COMMIT || String(Date.now());   // new on every deploy
-const MIME = { '.apk': 'application/vnd.android.package-archive', '.json': 'application/json', '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css', '.png': 'image/png', '.svg': 'image/svg+xml', '.glb': 'model/gltf-binary', '.ttf': 'font/ttf' };
+const MIME = { '.apk': 'application/vnd.android.package-archive', '.json': 'application/json', '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css', '.png': 'image/png', '.svg': 'image/svg+xml', '.glb': 'model/gltf-binary', '.ttf': 'font/ttf', '.pbf': 'application/x-protobuf' };
 
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, 'http://x');
