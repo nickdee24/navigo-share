@@ -6,9 +6,10 @@ window.TDMap = (function () {
   let map;
   // ---------- Truck Dash colours (same as the NaviGO app) ----------
   // Night colours from NaviGO's map (TruckDashMap.kt): navy-grey land, blue-grey roads, dark green parks
-  const C = { LAND: '#272E3A', URBAN: '#272E3A', PARK: '#236A4E', BUILDING: '#2D3E53', WATER: '#1C3550', RIVER: '#24456A', MINOR: '#3E5770',
-    MAIN: '#3E5770', MOTORWAY: '#7898B8', MOTORWAY_ROUTE: '#7898B8', CASE: '#34495F', PATH: '#404044', BORDER: '#575E68',
-    TOWN: '#FFFFFF', ROADLABEL: '#A9C3DE', MINORLABEL: '#8FA9C4', WATERLABEL: '#5A9EC4', HALO: '#272E3A' };
+  // Waze night colours (Nick's colour spec, 23 Nov): midnight navy land, slate highways, steel streets, navy water
+  const C = { LAND: '#121722', URBAN: '#121722', PARK: '#132624', BUILDING: '#1B2333', WATER: '#0C2238', RIVER: '#0C2238', MINOR: '#1E2636',
+    MAIN: '#253043', MOTORWAY: '#2A3447', MOTORWAY_ROUTE: '#2A3447', CASE: '#0F141E', PATH: '#1A202C', BORDER: '#3A4456',
+    TOWN: '#CBD5E1', ROADLABEL: '#94A3B8', MINORLABEL: '#94A3B8', WATERLABEL: '#4A7FA8', HALO: '#0F172A' };
   // parks, fields, woods, pitches etc. green; everything else plain ground
   const greenByClass = ['match', ['get', 'class'],
     ['park', 'grass', 'pitch', 'cemetery', 'wood', 'scrub', 'agriculture', 'crop', 'golf_course', 'garden', 'playground'], C.PARK, C.LAND];
@@ -53,7 +54,7 @@ window.TDMap = (function () {
         if (isRoad(id) && !/rail|path|pedestrian|steps|track/.test(id)) paint(id, 'line-width', wazeWidth(id));
         if (id.includes('water')) paint(id, 'line-color', C.RIVER);
         else if (id.startsWith('admin')) paint(id, 'line-color', C.BORDER);
-        else if (isRoad(id) && id.includes('case')) { paint(id, 'line-color', C.CASE); paint(id, 'line-opacity', 0); }
+        else if (isRoad(id) && id.includes('case')) { paint(id, 'line-color', C.CASE); paint(id, 'line-opacity', 1); }
         else if (isRoad(id) && isMotorway(id)) { paint(id, 'line-opacity', 1); paint(id, 'line-color', routeShown ? C.MOTORWAY_ROUTE : C.MOTORWAY); }
         else if (isRoad(id) && /primary|secondary|tertiary|major/.test(id)) paint(id, 'line-color', C.MAIN);
         else if (isRoad(id) && /rail/.test(id)) { paint(id, 'line-color', '#E02424'); paint(id, 'line-opacity', 1); stripes(l); }
@@ -121,11 +122,11 @@ window.TDMap = (function () {
       if (!map.getSource('nv-traffic')) map.addSource('nv-traffic', { type: 'vector', url: 'mapbox://mapbox.mapbox-traffic-v1' });
       if (!map.getLayer('nv-traffic')) map.addLayer({ id: 'nv-traffic', type: 'line', source: 'nv-traffic', 'source-layer': 'traffic', minzoom: 8,
         layout: { 'line-cap': 'round', 'line-join': 'round' },
-        paint: { 'line-color': ['match', ['get', 'congestion'], 'moderate', '#FF8C3A', 'heavy', '#E5332A', 'severe', '#A3141C', 'rgba(0,0,0,0)'],
+        paint: { 'line-color': ['match', ['get', 'congestion'], 'moderate', '#FFB74D', 'heavy', '#FF5252', 'severe', '#B71C1C', 'rgba(0,0,0,0)'],
           'line-width': TW, 'line-offset': TO, 'line-opacity': 0.95 } }, before);
       if (!map.getLayer('nv-traffic-anim')) map.addLayer({ id: 'nv-traffic-anim', type: 'line', source: 'nv-traffic', 'source-layer': 'traffic', minzoom: 12,
         filter: ['match', ['get', 'congestion'], ['moderate', 'heavy', 'severe'], true, false],
-        paint: { 'line-color': ['match', ['get', 'congestion'], 'moderate', '#D65A0A', 'heavy', '#8E0F0F', 'severe', '#4A0508', 'rgba(0,0,0,0)'],
+        paint: { 'line-color': ['match', ['get', 'congestion'], 'moderate', '#804900', 'heavy', '#7F0000', 'severe', '#3E0000', 'rgba(0,0,0,0)'],
           'line-width': TS, 'line-offset': TO, 'line-opacity': 0.85, 'line-dasharray': dash(0) } }, before);
     } catch (e) { console.warn('traffic', e.message); return; }
     if (trafficTimer) return;

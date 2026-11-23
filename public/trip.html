@@ -342,11 +342,11 @@
     map.addSource('nv-done', { type: 'geojson', data: emptyLine() });
     map.addSource('nv-todo', { type: 'geojson', data: emptyLine() });
     map.addLayer({ id: 'nv-done', type: 'line', source: 'nv-done', layout: { 'line-join': 'round', 'line-cap': 'round' },
-      paint: { 'line-color': '#8A94A6', 'line-width': w(1), 'line-opacity': .6 } }, lbl);
+      paint: { 'line-color': '#383454', 'line-width': w(1), 'line-opacity': .65 } }, lbl);
     map.addLayer({ id: 'nv-todo-case', type: 'line', source: 'nv-todo', layout: { 'line-join': 'round', 'line-cap': 'round' },
-      paint: { 'line-color': '#0D0F12', 'line-width': w(1.45) } }, lbl);
+      paint: { 'line-color': '#3B2485', 'line-width': w(1.45) } }, lbl);
     map.addLayer({ id: 'nv-todo', type: 'line', source: 'nv-todo', layout: { 'line-join': 'round', 'line-cap': 'round' },
-      paint: { 'line-color': '#3B9EFF', 'line-width': w(1) } }, lbl);
+      paint: { 'line-color': '#9D85FF', 'line-width': w(1) } }, lbl);
     mapReady = true; routeV = -1;
     if (data) { drawRoute(data); drawMe(data); }
   });
