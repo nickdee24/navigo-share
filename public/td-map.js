@@ -138,5 +138,39 @@ window.TDMap = (function () {
     }, 80);
   }
 
-  return { apply, traffic };
+
+  // TomTom's map in Waze's night colours (same rules as the app's TomTomWaze.kt)
+  function wazeTomTom(m) {
+    map = m;
+    const W = { land: '#121722', water: '#0C2238', park: '#132624', building: '#161C29', local: '#1E2636', main: '#253043',
+      highway: '#2A3447', casing: '#0F141E', label: '#94A3B8', town: '#CBD5E1', halo: '#0F172A', waterLabel: '#4A7FA8' };
+    for (const l of map.getStyle().layers) {
+      const id = l.id;
+      if (id.startsWith('nv-') || id.startsWith('Traffic') || id.startsWith('3D')) continue;
+      if (l.type === 'background') paint(id, 'background-color', W.land);
+      else if (l.type === 'fill') {
+        if (/^Water - Shadow|^Buildings - (Shadow|Underground)|Pedestrian shadow|Bridge & Pier shadow/.test(id)) paint(id, 'fill-opacity', 0);
+        else if (id.startsWith('Water')) { paint(id, 'fill-color', W.water); paint(id, 'fill-outline-color', W.water); }
+        else if (/Landcover|Protected|Outdoor/.test(id)) { paint(id, 'fill-color', W.park); paint(id, 'fill-outline-color', W.park); }
+        else if (id.startsWith('Buildings')) { paint(id, 'fill-color', W.building); paint(id, 'fill-outline-color', W.building); }
+        else if (id.startsWith('Areas')) paint(id, 'fill-color', W.local);
+        else if (/^(LULC|Structure|Transit)/.test(id)) { paint(id, 'fill-color', W.land); paint(id, 'fill-outline-color', W.land); }
+      } else if (l.type === 'line') {
+        if (id.startsWith('Water')) paint(id, 'line-color', W.water);
+        else if (id.startsWith('Buildings')) paint(id, 'line-color', W.building);
+        else if (/Railway|Subway|^Borders|Ferry|Aerialway|Aeroway|Platform/.test(id)) { /* keep */ }
+        else if (/outline/.test(id)) paint(id, 'line-color', W.casing);
+        else if (/Motorway|Major road small scale/.test(id)) paint(id, 'line-color', W.highway);
+        else if (/Primary|Secondary/.test(id)) paint(id, 'line-color', W.main);
+        else if (/Tertiary|Street|Minor|Link|Road line|Tarmac/.test(id)) paint(id, 'line-color', W.local);
+        else if (/Path|Track/.test(id)) paint(id, 'line-color', W.casing);
+      } else if (l.type === 'symbol') {
+        if (/Shield|Exit Number|arrow|^POI/.test(id)) continue;
+        if (id.startsWith('Places')) { paint(id, 'text-color', W.town); paint(id, 'text-halo-color', W.halo); }
+        else if (/^NatureLabels/.test(id) && /Water|River/.test(id)) { paint(id, 'text-color', W.waterLabel); paint(id, 'text-halo-color', W.halo); }
+        else { paint(id, 'text-color', W.label); paint(id, 'text-halo-color', W.halo); }
+      }
+    }
+  }
+  return { apply, traffic, wazeTomTom };
 })();

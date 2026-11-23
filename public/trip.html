@@ -324,7 +324,7 @@
   const emptyLine = () => ({ type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: [] } });
   map.on('style.load', () => {
     // TomTom's map keeps its own look (no traffic); the Mapbox one gets NaviGO's colours and traffic
-    if (!window.USE_TOMTOM) TDMap.apply(map, true);
+    if (!window.USE_TOMTOM) TDMap.apply(map, true); else TDMap.wazeTomTom(map);   // Waze night colours either way
     const lbl = (map.getStyle().layers.find(l => l.type === 'symbol') || {}).id;
     if (!window.USE_TOMTOM) TDMap.traffic(map, lbl);
     // 3D buildings, like NaviGO (OpenFreeMap's building heights, raised as blocks from zoom 15)
