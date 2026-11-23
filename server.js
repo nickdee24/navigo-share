@@ -51,7 +51,7 @@ function cleanRoute(r) {
 // says you're not sharing and shows no location. Kept in memory (and state.json); after a server restart the
 // phone's next update recreates it.
 db.shares ||= {};
-let previewCache = null, ytCache = null;   // song -> Deezer preview (see /api/share/:id/preview)
+let previewCache = null, ytCache = null, ytSearchCache = null;   // song -> Deezer preview (see /api/share/:id/preview)
 const SHARE_ID_RE = /^[A-Za-z0-9]{8,16}$/;
 const SHARE_KEY_RE = /^[a-f0-9]{24,48}$/;
 const SHARE_KEEP_MS = 30 * 86400000;     // forget a link nobody has used for 30 days
@@ -333,6 +333,35 @@ const server = http.createServer(async (req, res) => {
     let app = null;
     try { app = JSON.parse(fs.readFileSync(path.join(PUBLIC_DIR, 'app', 'navigo-live.json'), 'utf8')); } catch (_) {}
     return json(res, 200, { site: SITE_VERSION, app });
+  }
+  // YouTube Music search for NaviGO's music player (YouTube Data API, key stays here: YOUTUBE_KEY). Songs come back
+  // in the same shape as the Spotify search; uri 'ytm:<videoId>' tells the app to play it in YouTube Music.
+  if (url.pathname === '/api/music/youtube') {
+    const q = String(url.searchParams.get('q') || '').trim().slice(0, 100);
+    if (!q) return json(res, 400, { error: 'Type something to search for' });
+    const ytKey = process.env.YOUTUBE_KEY;
+    if (!ytKey) return json(res, 503, { error: 'not-set-up' });
+    ytSearchCache ||= new Map();
+    const hit = ytSearchCache.get(q.toLowerCase());
+    if (hit && Date.now() - hit.at < 3600000) return json(res, 200, hit.body);
+    try {
+      const r = await fetch('https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&videoCategoryId=10&maxResults=12&regionCode=GB&q='
+        + encodeURIComponent(q) + '&key=' + encodeURIComponent(ytKey), { headers: { Referer: 'https://navigo-share.onrender.com/' } });
+      const j = await r.json();
+      if (j.error) return json(res, 503, { error: j.error.message || 'YouTube search failed' });
+      const dec = s => String(s || '').replace(/&amp;/g, '&').replace(/&#39;/g, "'").replace(/&quot;/g, '"');
+      const items = (j.items || []).filter(x => x.id && x.id.videoId).map(x => {
+        const ch = dec(x.snippet.channelTitle), topic = / - Topic$/.test(ch);
+        return { name: dec(x.snippet.title), uri: 'ytm:' + x.id.videoId, artists: ch.replace(/ - Topic$/, ''), album: topic ? 'YouTube Music' : '',
+          image: ((x.snippet.thumbnails || {}).default || {}).url || null, durationMs: 0, topic };
+      });
+      // the plain album songs ("Artist - Topic") first, like YouTube Music shows them
+      items.sort((a, b) => (b.topic ? 1 : 0) - (a.topic ? 1 : 0));
+      const body = { source: 'youtube', artists: [], tracks: items.slice(0, 10) };
+      ytSearchCache.set(q.toLowerCase(), { at: Date.now(), body });
+      if (ytSearchCache.size > 200) ytSearchCache.delete(ytSearchCache.keys().next().value);
+      return json(res, 200, body);
+    } catch (e) { return json(res, 502, { error: e.message }); }
   }
   if (url.pathname === '/api/music/search') {
     const q = String(url.searchParams.get('q') || '').trim().slice(0, 100);
