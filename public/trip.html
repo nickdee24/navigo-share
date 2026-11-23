@@ -328,11 +328,15 @@
     const lbl = (map.getStyle().layers.find(l => l.type === 'symbol') || {}).id;
     if (!window.USE_TOMTOM) TDMap.traffic(map, lbl);
     // 3D buildings, like NaviGO (OpenFreeMap's building heights, raised as blocks from zoom 15)
-    if (!map.getSource('nv-bld')) {
-      map.addSource('nv-bld', { type: 'vector', url: 'https://tiles.openfreemap.org/planet' });
-      map.addLayer({ id: 'nv-bld-3d', type: 'fill-extrusion', source: 'nv-bld', 'source-layer': 'building', minzoom: 15,
+    // (TomTom's own tiles have every building, so those are raised; otherwise OpenFreeMap's)
+    if (!map.getLayer('nv-bld-3d')) {
+      const tt = !!map.getSource('vectorTiles');
+      if (!tt && !map.getSource('nv-bld')) map.addSource('nv-bld', { type: 'vector', url: 'https://tiles.openfreemap.org/planet' });
+      map.addLayer({ id: 'nv-bld-3d', type: 'fill-extrusion', source: tt ? 'vectorTiles' : 'nv-bld', 'source-layer': tt ? 'buildings' : 'building', minzoom: 15,
+        filter: tt ? ['all', ['!=', ['get', 'underground'], true], ['!=', ['get', 'has_part'], true]] : ['all'],
         paint: { 'fill-extrusion-color': '#3A4150', 'fill-extrusion-opacity': 0.8,
-          'fill-extrusion-height': ['max', ['coalesce', ['get', 'render_height'], 0], 9], 'fill-extrusion-base': ['coalesce', ['get', 'render_min_height'], 0] } }, lbl);
+          'fill-extrusion-height': ['max', ['coalesce', ['get', tt ? 'height' : 'render_height'], 0], 9],
+          'fill-extrusion-base': ['coalesce', ['get', tt ? 'ground_height' : 'render_min_height'], 0] } }, lbl);
     }
     const w = k => ['interpolate', ['exponential', 1.5], ['zoom'], 8, 3 * k, 12, 6 * k, 16, 14 * k];
     map.addSource('nv-done', { type: 'geojson', data: emptyLine() });
