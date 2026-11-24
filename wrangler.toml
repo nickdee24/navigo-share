@@ -4,6 +4,8 @@
 name = "navigo-share"
 main = "worker/index.js"
 compatibility_date = "2025-06-01"
+# keep the keys added in the Cloudflare dashboard when GitHub deploys a new version
+keep_vars = true
 
 [assets]
 directory = "public"
