@@ -133,6 +133,11 @@
       white-space: nowrap; pointer-events: none; padding: 2px 8px; border-radius: 10px; background: rgba(23,26,31,.94); border: 1px solid var(--border);
       font: 600 11px/15px 'Rubik', system-ui, sans-serif; color: var(--text); box-shadow: 0 2px 6px rgba(0,0,0,.5); }
     .me .live.show { display: flex; }
+    /* the street they're on, just above the Live tag (moved down from the top box, Nick) */
+    .me .street { position: absolute; left: 50%; top: -72px; transform: translateX(-50%); display: none; white-space: nowrap; pointer-events: none;
+      padding: 2px 9px; border-radius: 10px; background: rgba(23,26,31,.94); border: 1px solid var(--border); color: #fff;
+      font: 700 12px/16px 'Rubik', system-ui, sans-serif; box-shadow: 0 2px 6px rgba(0,0,0,.5); max-width: 240px; overflow: hidden; text-overflow: ellipsis; }
+    .me .street.show { display: block; }
     /* headphones over the picture while music or the radio is playing (static, like they're wearing them) */
     .me .note { position: absolute; left: -2px; top: -4px; width: 60px; height: 50px; display: none; pointer-events: none;
       filter: drop-shadow(0 1px 2px rgba(0,0,0,.7)); }
@@ -319,7 +324,8 @@
     return r ? { url: location.origin + '/glyphs/Rubik/' + r[1] + '.pbf' } : { url };
   };
   const map = new gl.Map({ container: 'map', style: window.USE_TOMTOM ? TT_STYLE : 'mapbox://styles/mapbox/dark-v11', center: [-2.63, 53.55], zoom: 11,
-    dragRotate: false, pitchWithRotate: false, transformRequest: rubikGlyphs });
+    dragRotate: false, pitchWithRotate: false, transformRequest: rubikGlyphs,
+    antialias: true });   // smooth (anti-aliased) edges on the 3D buildings (Nick)
   map.touchZoomRotate.disableRotation();
   // Waze-style: zoom in and the map leans into 3D, zoom out and it flattens (flat from town level)
   const pitchFor = z => z >= 17 ? 58 : z <= 13 ? 0 : (z - 13) / 4 * 58;
@@ -348,8 +354,11 @@
         filter: tt ? ['all', ['!=', ['get', 'underground'], true], ['!=', ['get', 'has_part'], true]] : ['all'],
         paint: { 'fill-extrusion-color': '#3A4150', 'fill-extrusion-opacity': 0.8,
           'fill-extrusion-height': ['max', ['coalesce', ['get', tt ? 'height' : 'render_height'], 0], 9],
-          'fill-extrusion-base': ['coalesce', ['get', tt ? 'ground_height' : 'render_min_height'], 0] } }, lbl);
+          'fill-extrusion-base': ['coalesce', ['get', tt ? 'ground_height' : 'render_min_height'], 0],
+          'fill-extrusion-vertical-gradient': true } }, lbl);
     }
+    // softer light: less contrast between roofs and walls, so the buildings look smoother
+    try { map.setLight({ anchor: 'viewport', intensity: 0.25, color: '#ffffff' }); } catch (e) {}
     const w = k => ['interpolate', ['exponential', 1.5], ['zoom'], 8, 3 * k, 12, 6 * k, 16, 14 * k];
     map.addSource('nv-done', { type: 'geojson', data: emptyLine() });
     map.addSource('nv-todo', { type: 'geojson', data: emptyLine() });
@@ -450,7 +459,7 @@
     if (!me) {
       const el = document.createElement('div'); el.style.zIndex = 5;
       el.innerHTML = '<div class="me"><div class="np"><span class="tag"></span><span class="st"></span><span class="txt"></span><span class="time"></span></div>' +
-        '<div class="arrow"></div><div class="live"><span class="dot"></span><span class="lt"></span><span class="bt"></span></div><div class="nm"></div><div class="face"></div><svg class="note" viewBox="0 0 60 50"><path d="M9 34 V27 a21 21 0 0 1 42 0 V34" fill="none" stroke="#1D2127" stroke-width="7" stroke-linecap="round"/><path d="M9 34 V27 a21 21 0 0 1 42 0 V34" fill="none" stroke="#E9EDF3" stroke-width="3.5" stroke-linecap="round"/><rect x="2" y="28" width="12" height="18" rx="5" fill="#1DB954" stroke="#fff" stroke-width="2"/><rect x="46" y="28" width="12" height="18" rx="5" fill="#1DB954" stroke="#fff" stroke-width="2"/></svg></div>';
+        '<div class="arrow"></div><div class="street"></div><div class="live"><span class="dot"></span><span class="lt"></span><span class="bt"></span></div><div class="nm"></div><div class="face"></div><svg class="note" viewBox="0 0 60 50"><path d="M9 34 V27 a21 21 0 0 1 42 0 V34" fill="none" stroke="#1D2127" stroke-width="7" stroke-linecap="round"/><path d="M9 34 V27 a21 21 0 0 1 42 0 V34" fill="none" stroke="#E9EDF3" stroke-width="3.5" stroke-linecap="round"/><rect x="2" y="28" width="12" height="18" rx="5" fill="#1DB954" stroke="#fff" stroke-width="2"/><rect x="46" y="28" width="12" height="18" rx="5" fill="#1DB954" stroke="#fff" stroke-width="2"/></svg></div>';
       me = new gl.Marker({ element: el }).setLngLat(ll).addTo(map);
       photoV = -1;
     }
@@ -661,8 +670,10 @@
     if (pl) {
       const town = [pl.area, pl.town].filter(Boolean).join(', ');
       const text = pl.road ? pl.road + (town ? ' · ' + town : '') : town;
-      if (text) { $('where').innerHTML = '<span class="pin">📍</span> '; $('where').append(document.createTextNode(text)); }
-    }
+      // shown on the map above the Live tag now, not in the top box
+      const st = me && me.getElement().querySelector('.street');
+      if (st) { st.textContent = text || ''; st.classList.toggle('show', !!text); }
+    } else { const st = me && me.getElement().querySelector('.street'); if (st) st.classList.remove('show'); }
     $('placeBox').classList.toggle('empty', !$('where').textContent && !t.dest);
     // what they're listening to
     const radio = !t.endedAt && t.radio;
