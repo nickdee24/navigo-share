@@ -138,6 +138,12 @@
       filter: drop-shadow(0 1px 2px rgba(0,0,0,.7)); }
     .me .note.show { display: block; }
     .me .live .dot { width: 7px; height: 7px; }
+    /* live: the green dot blinks (Nick) */
+    .me .live .dot.live { animation: blink 1.1s steps(1, end) infinite; }
+    @keyframes blink { 50% { opacity: .15; } }
+    /* their battery, next to Live */
+    .me .live .bt { display: none; align-items: center; gap: 3px; margin-left: 3px; padding-left: 6px; border-left: 1px solid var(--border); }
+    .me .live .bt.show { display: flex; }
     .me .mode { position: absolute; left: 50%; top: 52px; transform: translateX(-50%); width: 44px; height: 44px;
       display: flex; align-items: center; justify-content: center; font-size: 36px; line-height: 1;
       filter: drop-shadow(0 2px 3px rgba(0,0,0,.7)); }   /* just the icon, no circle, as big as the face (Nick) */
@@ -444,7 +450,7 @@
     if (!me) {
       const el = document.createElement('div'); el.style.zIndex = 5;
       el.innerHTML = '<div class="me"><div class="np"><span class="tag"></span><span class="st"></span><span class="txt"></span><span class="time"></span></div>' +
-        '<div class="arrow"></div><div class="live"><span class="dot"></span><span class="lt"></span></div><div class="nm"></div><div class="face"></div><svg class="note" viewBox="0 0 60 50"><path d="M9 34 V27 a21 21 0 0 1 42 0 V34" fill="none" stroke="#1D2127" stroke-width="7" stroke-linecap="round"/><path d="M9 34 V27 a21 21 0 0 1 42 0 V34" fill="none" stroke="#E9EDF3" stroke-width="3.5" stroke-linecap="round"/><rect x="2" y="28" width="12" height="18" rx="5" fill="#1DB954" stroke="#fff" stroke-width="2"/><rect x="46" y="28" width="12" height="18" rx="5" fill="#1DB954" stroke="#fff" stroke-width="2"/></svg></div>';
+        '<div class="arrow"></div><div class="live"><span class="dot"></span><span class="lt"></span><span class="bt"></span></div><div class="nm"></div><div class="face"></div><svg class="note" viewBox="0 0 60 50"><path d="M9 34 V27 a21 21 0 0 1 42 0 V34" fill="none" stroke="#1D2127" stroke-width="7" stroke-linecap="round"/><path d="M9 34 V27 a21 21 0 0 1 42 0 V34" fill="none" stroke="#E9EDF3" stroke-width="3.5" stroke-linecap="round"/><rect x="2" y="28" width="12" height="18" rx="5" fill="#1DB954" stroke="#fff" stroke-width="2"/><rect x="46" y="28" width="12" height="18" rx="5" fill="#1DB954" stroke="#fff" stroke-width="2"/></svg></div>';
       me = new gl.Marker({ element: el }).setLngLat(ll).addTo(map);
       photoV = -1;
     }
@@ -711,7 +717,16 @@
     if (tag) {
       tag.classList.toggle('show', !t.endedAt && t.lat != null);
       tag.querySelector('.dot').className = 'dot ' + (age < 45000 ? 'live' : age < 180000 ? 'stale' : 'lost');
-      tag.querySelector('.lt').textContent = (age < 45000 ? 'Live · updated ' : 'Signal lost · ') + ago(age);
+      tag.querySelector('.lt').textContent = age < 45000 ? 'Live' : 'Signal lost · ' + ago(age);
+      // battery next to Live: green normally, orange when low (20% or under), in battery saver or charging slowly, red at 15% or under
+      const b = t.battery, bEl = tag.querySelector('.bt');
+      bEl.classList.toggle('show', !!b);
+      if (b) {
+        const col = b.pct <= 15 && !b.charging ? '#E53935' : (b.pct <= 20 || b.saver || (b.charging && b.slow)) ? '#F59F00' : '#2FB344';
+        bEl.innerHTML = '<svg width="20" height="11" viewBox="0 0 26 14"><rect x=".8" y=".8" width="21.4" height="12.4" rx="3" fill="none" stroke="rgba(238,238,238,.85)" stroke-width="1.6"/>' +
+          '<rect x="23" y="4.2" width="2.4" height="5.6" rx="1" fill="rgba(238,238,238,.85)"/><rect x="3" y="3" width="' + Math.max(1.5, 17 * b.pct / 100) + '" height="8" rx="1.5" fill="' + col + '"/>' +
+          (b.charging ? '<path d="M13 1.2 7.8 8h3.8l-1.4 4.8 5.4-6.9h-3.8z" fill="#fff"/>' : '') + '</svg><span style="color:' + col + '">' + b.pct + '%</span>';
+      }
     }
     $('liveBox').style.display = tag && !t.endedAt && t.lat != null ? 'none' : '';
     // the Message button, only while they're sharing
@@ -723,7 +738,7 @@
     $('speedo').classList.toggle('show', live);
     // battery: green normally, orange when low (20% or under), in battery saver or charging slowly, red at 15% or under
     const bt = t.battery;
-    $('batt').classList.toggle('show', !!(bt && live));
+    $('batt').classList.remove('show');   // (shown next to Live on the map now)
     if (bt) {
       const col = bt.pct <= 15 && !bt.charging ? '#E53935' : (bt.pct <= 20 || bt.saver || (bt.charging && bt.slow)) ? '#F59F00' : '#2FB344';
       $('battFill').setAttribute('width', Math.max(1.5, 17 * bt.pct / 100)); $('battFill').setAttribute('fill', col);
