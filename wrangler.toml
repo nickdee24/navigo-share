@@ -1,0 +1,24 @@
+# NaviGO Share trip on Cloudflare Workers (deployed from GitHub by Cloudflare's "Workers Builds").
+# Keys (TOMTOM_KEY, MAPBOX_TOKEN, YOUTUBE_KEY, GOOGLE_MAPS_KEY, SPOTIFY_CLIENT_ID/SECRET) go in
+# Cloudflare dashboard -> Workers & Pages -> navigo-share -> Settings -> Variables and Secrets.
+name = "navigo-share"
+main = "worker/index.js"
+compatibility_date = "2025-06-01"
+
+[assets]
+directory = "public"
+binding = "ASSETS"
+
+[[durable_objects.bindings]]
+name = "HUB"
+class_name = "Hub"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["Hub"]
+
+[version_metadata]
+binding = "CF_VERSION_METADATA"
+
+[observability]
+enabled = true
