@@ -75,7 +75,7 @@ setInterval(pruneShares, 10 * 60000);
 const num = v => (v == null || v === '' || !isFinite(+v) ? null : +v);
 function publicShare(t) {
   return { name: t.name, mood: t.mood, emoji: t.emoji, hasPhoto: !!t.photo, photoV: t.photoV || 0, lat: t.lat, lng: t.lng, heading: t.heading,
-    speed: t.speed, place: t.place || null, music: t.music || null,
+    speed: t.speed, place: t.place || null, music: t.music || null, battery: t.battery || null,
     radio: t.radio ? Object.assign({ hasLogo: !!t.radioLogo, logoV: t.radioLogoV || 0, canListen: !!t.radioUrl }, t.radio) : null,
     mode: 'car', activity: t.activity || null, dest: t.dest, stop: t.stop || null, eta: t.eta, remainingM: t.remainingM, route: t.route, routeV: t.routeV || 0, lastDest: t.lastDest || null,
     startedAt: t.startedAt, updatedAt: t.updatedAt, endedAt: t.endedAt || null, arrived: !!t.arrived,
@@ -117,6 +117,9 @@ async function handleShareApi(req, res, action) {
       t.radioLogo = b.radio.logo; t.radioLogoV = (t.radioLogoV || 0) + 1;
     }
   } else if (b.radio !== undefined) { t.radio = null; t.radioLogo = null; t.radioUrl = null; }
+  // the phone's battery (shown as a battery icon on the share page)
+  if (b.battery && isFinite(+b.battery.pct)) t.battery = { pct: Math.max(0, Math.min(100, Math.round(+b.battery.pct))), charging: !!b.battery.charging,
+    slow: !!b.battery.slow, saver: !!b.battery.saver, at: Date.now() };
   // NaviGO is car only: driving or stopped
   if (b.activity !== undefined) t.activity = ['driving', 'stopped', 'walking'].includes(b.activity) ? b.activity : null;
   const lat = num(b.lat), lng = num(b.lng);

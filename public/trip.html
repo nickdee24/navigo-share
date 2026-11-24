@@ -101,6 +101,11 @@
     #speedo svg { position: absolute; inset: 0; }
     #speedo b { font: 700 28px/1 'Rubik', system-ui, sans-serif; } #speedo i { font: 400 11px/1 'Rubik', system-ui, sans-serif; font-style: normal; opacity: .8; margin-top: 2px; }
     body.sv #speedo { bottom: calc(25vh + 64px); }
+    /* their phone's battery, above the speed dial: green, orange (low / battery saver / slow charging), red (very low) */
+    #batt { position: fixed; left: 14px; bottom: calc(150px + env(safe-area-inset-bottom)); z-index: 1000; display: none; align-items: center; gap: 6px;
+      padding: 6px 10px; border-radius: 999px; background: rgba(20,24,33,.92); box-shadow: 0 2px 8px rgba(0,0,0,.4); font: 700 14px/1 'Rubik', system-ui, sans-serif; }
+    #batt.show { display: flex; }
+    body.sv #batt { bottom: calc(25vh + 150px); }
     #brand { position: fixed; left: 14px; bottom: calc(26px + env(safe-area-inset-bottom)); z-index: 1000;
       font-size: 12px; color: var(--muted); background: rgba(23,26,31,.85); padding: 5px 10px; border-radius: 20px; }
     #brand b { color: var(--accent); }
@@ -273,6 +278,7 @@
   <div id="replyToast"></div>
   <button id="follow" class="on" title="Follow">◎</button>
   <div id="brand">Shared from <b>NaviGO</b></div>
+  <div id="batt"><svg width="26" height="14" viewBox="0 0 26 14"><rect x=".8" y=".8" width="21.4" height="12.4" rx="3" fill="none" stroke="rgba(238,238,238,.85)" stroke-width="1.6"/><rect x="23" y="4.2" width="2.4" height="5.6" rx="1" fill="rgba(238,238,238,.85)"/><rect id="battFill" x="3" y="3" width="17" height="8" rx="1.5" fill="#2FB344"/><path id="battBolt" d="M13 1.2 7.8 8h3.8l-1.4 4.8 5.4-6.9h-3.8z" fill="#fff" style="display:none"/></svg><span id="battPct">--%</span></div>
   <div id="speedo"><svg viewBox="0 0 76 76"><circle cx="38" cy="38" r="34.5" fill="none" stroke="rgba(238,238,238,.6)" stroke-width="2" stroke-dasharray="4 6"/></svg><b>0</b><i>mph</i></div>
 
   <div id="msg"><div class="box"><div style="font-size:36px" id="msgIcon">🔗</div><h2 id="msgTitle"></h2><p id="msgText"></p></div></div>
@@ -715,6 +721,15 @@
     // always on while they're sharing (Nick): their latest speed, no tapping needed
     const live = !t.endedAt && t.lat != null;
     $('speedo').classList.toggle('show', live);
+    // battery: green normally, orange when low (20% or under), in battery saver or charging slowly, red at 15% or under
+    const bt = t.battery;
+    $('batt').classList.toggle('show', !!(bt && live));
+    if (bt) {
+      const col = bt.pct <= 15 && !bt.charging ? '#E53935' : (bt.pct <= 20 || bt.saver || (bt.charging && bt.slow)) ? '#F59F00' : '#2FB344';
+      $('battFill').setAttribute('width', Math.max(1.5, 17 * bt.pct / 100)); $('battFill').setAttribute('fill', col);
+      $('battBolt').style.display = bt.charging ? '' : 'none';
+      $('battPct').textContent = bt.pct + '%'; $('battPct').style.color = col;
+    }
     if (live) $('speedo').querySelector('b').textContent = Math.round((t.speed || 0) * 2.23694);
     if (t.endedAt) {
       $('actText').textContent = t.arrived ? 'Arrived' : 'Not sharing right now';
