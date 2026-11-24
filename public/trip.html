@@ -311,7 +311,7 @@
   map.touchZoomRotate.disableRotation();
   // Waze-style: zoom in and the map leans into 3D, zoom out and it flattens (flat from town level)
   const pitchFor = z => z >= 17 ? 58 : z <= 13 ? 0 : (z - 13) / 4 * 58;
-  map.on('zoom', e => { if (e.originalEvent) map.setPitch(pitchFor(map.getZoom())); });
+  // (the tilt used to change during a pinch, which cut each pinch short: now it eases in once you let go)
   map.on('moveend', () => { const p = pitchFor(map.getZoom()); if (Math.abs(map.getPitch() - p) > 1) map.easeTo({ pitch: p, duration: 300 }); });
   // the next stop's pin
   let stopMark = null;
