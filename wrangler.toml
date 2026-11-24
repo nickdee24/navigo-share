@@ -10,6 +10,8 @@ keep_vars = true
 [assets]
 directory = "public"
 binding = "ASSETS"
+# serve trip.html / plan.html as they are (no redirect to /trip), the Worker adds the link preview
+html_handling = "none"
 
 [[durable_objects.bindings]]
 name = "HUB"
