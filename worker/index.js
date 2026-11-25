@@ -492,10 +492,10 @@ export class Hub extends DurableObject {
       let u; try { u = new URL(msg.UnsubscribeURL); } catch { return json(200, {}); }
       const sub = u.searchParams.get('SubscriptionArn') || '';
       if (u.protocol === 'https:' && u.hostname === 'sns.eu-west-2.amazonaws.com' && u.searchParams.get('Action') === 'Unsubscribe'
-          && sub.startsWith(msg.TopicArn + ':') && Date.now() - ((this.tried ||= {})[arn[2]] || 0) > 30000) {
+          && sub.startsWith(msg.TopicArn + ':') && Date.now() - ((this.tried ||= {})[arn[2]] || 0) > 60000 && !(this.sm.unsub || {})[arn[2]]?.why) {
         this.tried[arn[2]] = Date.now();
         const r = await fetch(u);
-        this.sm.unsub = Object.assign(this.sm.unsub || {}, { [arn[2]]: { status: r.status, at: Date.now() } });
+        this.sm.unsub = Object.assign(this.sm.unsub || {}, { [arn[2]]: { status: r.status, why: (/<Code>[\s\S]*<\/Message>/.exec(await r.text()) || [''])[0].replace(/arn:\S+/g, 'arn').slice(0, 200), at: Date.now() } });
         await this.ctx.storage.put('sm', this.sm);
       }
       this.smCount();
