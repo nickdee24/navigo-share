@@ -49,7 +49,8 @@ export default {
     // Council roadworks PAUSED (Nick, 25 Nov): messages are thrown away and none are given out. The subscription itself is left
     // alone, so switching this to false starts it again (signature checks are in the Hub).
     const ROADWORKS_PAUSED = true;
-    if (ROADWORKS_PAUSED && url.pathname === '/api/roadworks') return hub(env).fetch(req);
+    if (ROADWORKS_PAUSED && url.pathname === '/api/streetmanager') return json(200, { paused: true });   // (never confirms anything)
+    if (ROADWORKS_PAUSED && url.pathname === '/api/roadworks') return json(200, { works: [], paused: true });
     if (url.pathname.startsWith('/api/')) return hub(env).fetch(req);
     return env.ASSETS.fetch(req);
   },
@@ -486,21 +487,6 @@ export class Hub extends DurableObject {
     const arn = /^arn:aws:sns:eu-west-2:(\d{12}):([\w-]+)$/.exec(msg && msg.TopicArn || '');
     if (!arn || !(await this.snsSigned(msg))) return json(403, { error: 'Not a signed Street Manager message' });
     if (this.sm.account && this.sm.account !== arn[1]) return json(403, { error: 'Unknown sender' });
-    // Unsubscribed at Nick's request (25 Nov): each genuine message is answered by using its own unsubscribe link, once per feed
-    if (msg.Type === 'SubscriptionConfirmation') return json(503, { paused: true });
-    if (msg.Type === 'Notification' && this.sm.account) {
-      let u; try { u = new URL(msg.UnsubscribeURL); } catch { return json(200, {}); }
-      const sub = u.searchParams.get('SubscriptionArn') || '';
-      if (u.protocol === 'https:' && u.hostname === 'sns.eu-west-2.amazonaws.com' && u.searchParams.get('Action') === 'Unsubscribe'
-          && sub.startsWith(msg.TopicArn + ':') && Date.now() - ((this.tried ||= {})[arn[2]] || 0) > 60000 && !(this.sm.unsub || {})[arn[2]]?.why) {
-        this.tried[arn[2]] = Date.now();
-        const r = await fetch(u);
-        this.sm.unsub = Object.assign(this.sm.unsub || {}, { [arn[2]]: { status: r.status, why: (/<Code>[\s\S]*<\/Message>/.exec(await r.text()) || [''])[0].replace(/arn:\S+/g, 'arn').slice(0, 200), at: Date.now() } });
-        await this.ctx.storage.put('sm', this.sm);
-      }
-      this.smCount();
-    }
-    return json(200, { paused: true });
     if (msg.Type === 'SubscriptionConfirmation') {
       let u; try { u = new URL(msg.SubscribeURL); } catch { return json(400, {}); }
       if (u.protocol !== 'https:' || u.hostname !== 'sns.eu-west-2.amazonaws.com') return json(400, {});
