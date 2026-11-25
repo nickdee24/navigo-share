@@ -49,11 +49,7 @@ export default {
     // Council roadworks PAUSED (Nick, 25 Nov): messages are thrown away and none are given out. The subscription itself is left
     // alone, so switching this to false starts it again (signature checks are in the Hub).
     const ROADWORKS_PAUSED = true;
-    if (ROADWORKS_PAUSED && url.pathname === '/api/streetmanager') {
-      const m = await req.json().catch(() => ({}));
-      return m.Type === 'SubscriptionConfirmation' ? json(503, { paused: true }) : json(200, { paused: true });
-    }
-    if (ROADWORKS_PAUSED && url.pathname === '/api/roadworks') return json(200, { works: [], paused: true });
+    if (ROADWORKS_PAUSED && url.pathname === '/api/roadworks') return hub(env).fetch(req);
     if (url.pathname.startsWith('/api/')) return hub(env).fetch(req);
     return env.ASSETS.fetch(req);
   },
@@ -490,6 +486,21 @@ export class Hub extends DurableObject {
     const arn = /^arn:aws:sns:eu-west-2:(\d{12}):([\w-]+)$/.exec(msg && msg.TopicArn || '');
     if (!arn || !(await this.snsSigned(msg))) return json(403, { error: 'Not a signed Street Manager message' });
     if (this.sm.account && this.sm.account !== arn[1]) return json(403, { error: 'Unknown sender' });
+    // Unsubscribed at Nick's request (25 Nov): each genuine message is answered by using its own unsubscribe link, once per feed
+    if (msg.Type === 'SubscriptionConfirmation') return json(503, { paused: true });
+    if (msg.Type === 'Notification' && this.sm.account) {
+      let u; try { u = new URL(msg.UnsubscribeURL); } catch { return json(200, {}); }
+      const sub = u.searchParams.get('SubscriptionArn') || '';
+      if (u.protocol === 'https:' && u.hostname === 'sns.eu-west-2.amazonaws.com' && u.searchParams.get('Action') === 'Unsubscribe'
+          && sub.startsWith(msg.TopicArn + ':') && Date.now() - ((this.tried ||= {})[arn[2]] || 0) > 30000) {
+        this.tried[arn[2]] = Date.now();
+        const r = await fetch(u);
+        this.sm.unsub = Object.assign(this.sm.unsub || {}, { [arn[2]]: { status: r.status, at: Date.now() } });
+        await this.ctx.storage.put('sm', this.sm);
+      }
+      this.smCount();
+    }
+    return json(200, { paused: true });
     if (msg.Type === 'SubscriptionConfirmation') {
       let u; try { u = new URL(msg.SubscribeURL); } catch { return json(400, {}); }
       if (u.protocol !== 'https:' || u.hostname !== 'sns.eu-west-2.amazonaws.com') return json(400, {});
@@ -564,7 +575,7 @@ export class Hub extends DurableObject {
       if (km <= r) out.push(Object.assign({ id: ref, km: +km.toFixed(2) }, w));
     }
     out.sort((x, y) => x.km - y.km);
-    return json(200, { works: out.slice(0, 500), confirmed: !!this.sm.account, topics: Object.keys(this.sm.topics), today: this.smToday || 0 });
+    return json(200, { works: [], paused: true, confirmed: !!this.sm.account, topics: Object.keys(this.sm.topics), today: this.smToday || 0, unsub: this.sm.unsub || null });
   }
 }
 
