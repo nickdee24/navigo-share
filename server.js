@@ -332,7 +332,7 @@ const server = http.createServer(async (req, res) => {
   if (url.pathname === '/health') return json(res, 200, { ok: true });
   // NaviGO Share moved to Cloudflare (24 Nov 2026): send everyone (share links, NaviGO Live) to the new address.
   // 308 keeps POSTs as POSTs for anything that follows it.
-  res.writeHead(308, { Location: 'https://navigo-share.nickdoonan.workers.dev' + url.pathname + url.search, 'Cache-Control': 'no-store' });
+  res.writeHead(308, { Location: 'https://navigo-share.navigo.workers.dev' + url.pathname + url.search, 'Cache-Control': 'no-store' });
   return res.end();
   // NaviGO Live asks this when it opens and every minute: 'site' changes on every deploy (so the app reloads the page),
   // 'app' is the newest NaviGO Live APK (public/app/navigo-live.json) so the app can offer the update itself.
