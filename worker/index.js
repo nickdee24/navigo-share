@@ -46,6 +46,14 @@ export default {
       if (meta.ok) html = html.replace('</head>', await meta.text() + '</head>');
       return new Response(html, { headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-cache' } });
     }
+    // Council roadworks PAUSED (Nick, 25 Nov): messages are thrown away and none are given out. The subscription itself is left
+    // alone, so switching this to false starts it again (signature checks are in the Hub).
+    const ROADWORKS_PAUSED = true;
+    if (ROADWORKS_PAUSED && url.pathname === '/api/streetmanager') {
+      const m = await req.json().catch(() => ({}));
+      return m.Type === 'SubscriptionConfirmation' ? json(503, { paused: true }) : json(200, { paused: true });
+    }
+    if (ROADWORKS_PAUSED && url.pathname === '/api/roadworks') return json(200, { works: [], paused: true });
     if (url.pathname.startsWith('/api/')) return hub(env).fetch(req);
     return env.ASSETS.fetch(req);
   },
