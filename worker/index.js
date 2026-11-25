@@ -6,6 +6,7 @@
 // one Durable Object ("Hub"), which plays the part server.js's memory used to.
 import { DurableObject } from 'cloudflare:workers';
 import { connect } from 'cloudflare:sockets';
+import { createVerify, X509Certificate } from 'node:crypto';
 
 const SHARE_ID_RE = /^[A-Za-z0-9]{8,16}$/;
 const SHARE_KEY_RE = /^[a-f0-9]{24,48}$/;
@@ -100,7 +101,9 @@ export class Hub extends DurableObject {
     ctx.blockConcurrencyWhile(async () => {
       this.db = (await ctx.storage.get('db')) || { shares: {} };
       this.db.shares ||= {};
-      this.works = (await ctx.storage.get('works')) || {};
+      // each roadwork is its own row (one big value would outgrow the 2 MB limit)
+      for (const [k, v] of await ctx.storage.list({ prefix: 'w:' })) this.works[k.slice(2)] = v;
+      this.sm = (await ctx.storage.get('sm')) || { account: null, topics: {} };
     });
   }
 
@@ -110,10 +113,7 @@ export class Hub extends DurableObject {
     this.saveTimer = setTimeout(async () => { this.saveTimer = null; await this.ctx.storage.put('db', this.db); }, 2000);
     this.ctx.storage.getAlarm().then(a => { if (!a) this.ctx.storage.setAlarm(Date.now() + 10 * 60000); });
   }
-  saveWorks() {
-    if (this.worksTimer) return;
-    this.worksTimer = setTimeout(async () => { this.worksTimer = null; await this.ctx.storage.put('works', this.works); }, 3000);
-  }
+  dropWork(ref) { if (this.works[ref]) { delete this.works[ref]; this.ctx.storage.delete('w:' + ref); } }
 
   // every 10 minutes: tidy old links and finished roadworks
   async alarm() {
@@ -122,9 +122,8 @@ export class Hub extends DurableObject {
       if (now - Math.max(t.updatedAt || 0, t.eventAt || 0) > SHARE_KEEP_MS) delete this.db.shares[id];
       else if (!t.endedAt && now - (t.updatedAt || 0) > SHARE_STALE_MS) endShare(t, false);
     }
-    for (const [ref, w] of Object.entries(this.works)) if (w.end && w.end < now - 86400000) delete this.works[ref];
+    for (const [ref, w] of Object.entries(this.works)) if (w.end && w.end < now - (w.activity ? 0 : 14 * 86400000)) this.dropWork(ref);
     await this.ctx.storage.put('db', this.db);
-    await this.ctx.storage.put('works', this.works);
     await this.ctx.storage.setAlarm(now + 10 * 60000);
   }
 
@@ -475,54 +474,88 @@ export class Hub extends DurableObject {
   }
 
   // ---------- council roadworks: DfT Street Manager open data, pushed here through Amazon SNS ----------
+  // Only messages signed by Amazon are read, and only from the AWS account that Street Manager's first confirmation
+  // came from (anyone can have a genuine Amazon signature, so the signature alone isn't enough).
   async streetManager(req) {
-    let msg; try { msg = JSON.parse(await req.text()); } catch { return json(400, {}); }
-    // first time: Amazon asks us to confirm the subscription by opening a link
-    if (msg.Type === 'SubscriptionConfirmation' && /^https:\/\/sns\.[a-z0-9-]+\.amazonaws\.com\//.test(msg.SubscribeURL || '')) {
-      await fetch(msg.SubscribeURL);
-      this.works._confirmedAt = Date.now(); this.saveWorks();
+    let msg; try { const t = await req.text(); if (t.length > 300000) return json(413, {}); msg = JSON.parse(t); } catch { return json(400, {}); }
+    const arn = /^arn:aws:sns:eu-west-2:(\d{12}):([\w-]+)$/.exec(msg && msg.TopicArn || '');
+    if (!arn || !(await this.snsSigned(msg))) return json(403, { error: 'Not a signed Street Manager message' });
+    if (this.sm.account && this.sm.account !== arn[1]) return json(403, { error: 'Unknown sender' });
+    if (msg.Type === 'SubscriptionConfirmation') {
+      let u; try { u = new URL(msg.SubscribeURL); } catch { return json(400, {}); }
+      if (u.protocol !== 'https:' || u.hostname !== 'sns.eu-west-2.amazonaws.com') return json(400, {});
+      const ok = await fetch(u);
+      if (!ok.ok) return json(502, { error: 'Could not confirm' });   // Amazon tries again
+      this.sm.account = arn[1]; this.sm.topics[arn[2]] = Date.now();
+      await this.ctx.storage.put('sm', this.sm);
       return json(200, { ok: true });
     }
-    if (msg.Type !== 'Notification') return json(200, { ok: true });
+    if (msg.Type !== 'Notification' || !this.sm.account) return json(200, { ok: true });
+    this.smCount();
     let n; try { n = JSON.parse(msg.Message); } catch { return json(200, { ok: true }); }
-    const d = n.object_data || n.objectData || n;
-    const ref = String(d.work_reference_number || d.permit_reference_number || n.object_reference || '').slice(0, 60);
+    const d = n.object_data || {}, activity = n.object_type === 'ACTIVITY';
+    if (n.object_type !== 'PERMIT' && !activity) return json(200, { ok: true });
+    const ref = String(n.object_reference || '').slice(0, 60);
     if (!ref) return json(200, { ok: true });
-    const status = String(d.work_status_ref || d.work_status || d.permit_status || '').toLowerCase();
-    if (/completed|cancel|closed|revoked|refused/.test(status)) { if (this.works[ref]) { delete this.works[ref]; this.saveWorks(); } return json(200, { ok: true }); }
-    const pt = wktCentre(d.works_location_coordinates || d.location_coordinates || '');
-    if (!pt) return json(200, { ok: true });
+    const at = Date.parse(n.event_time) || Date.now();
+    if (this.works[ref] && this.works[ref].at > at) return json(200, { ok: true });   // an older message arriving late
+    const tm = String(d.current_traffic_management_type_ref || d.traffic_management_type_ref || d.traffic_management_type || '').toLowerCase().replace(/[ -]/g, '_');
+    const when = x => { const t = Date.parse(x || ''); return isFinite(t) ? t : null; };
+    const end = when(d.actual_end_date_time || d.end_time || d.end_date || d.proposed_end_time || d.proposed_end_date);
+    // only works really happening on the road: not planned ones, and not ones that stay on the pavement
+    const on = activity ? d.cancelled !== 'Yes' && n.event_type !== 'ACTIVITY_CANCELLED' && d.traffic_management_required === 'Yes' : d.work_status_ref === 'in_progress';
+    const pt = on && tm !== 'no_carriageway_incursion' && wktPoint(d.works_location_coordinates || d.activity_coordinates);
+    if (!pt) { this.dropWork(ref); return json(200, { ok: true }); }
     const [lat, lng] = bngToWgs84(pt[0], pt[1]);
     // only keep the area NaviGO is used in (North West England and around), so the store stays small
     const A = (this.env.ROADWORKS_AREA || '52.6,-3.8,54.9,-1.2').split(',').map(Number);
     if (!(lat >= A[0] && lat <= A[2] && lng >= A[1] && lng <= A[3])) return json(200, { ok: true });
-    const when = s => { const t = Date.parse(s || ''); return isFinite(t) ? t : null; };
-    this.works[ref] = {
-      lat: +lat.toFixed(6), lng: +lng.toFixed(6),
-      street: String(d.street_name || d.street || '').slice(0, 80), town: String(d.town || d.area_name || '').slice(0, 60),
-      desc: String(d.description_of_work || d.work_category || d.activity_type || 'Roadworks').slice(0, 160),
-      tm: String(d.traffic_management_type_ref || d.traffic_management_type || '').slice(0, 40),
-      who: String(d.promoter_organisation || d.promoter || '').slice(0, 60),
-      start: when(d.actual_start_date_time || d.proposed_start_date || d.start_date), end: when(d.actual_end_date_time || d.proposed_end_date || d.end_date),
-      status, at: Date.now(),
-    };
-    this.saveWorks();
+    const w = this.works[ref] = { lat: +lat.toFixed(6), lng: +lng.toFixed(6), street: String(d.street_name || '').slice(0, 80), town: String(d.town || d.area_name || '').slice(0, 60),
+      desc: String(d.activity_name || d.activity_type || 'Roadworks').slice(0, 160), tm: tm.slice(0, 40), who: String(d.promoter_organisation || '').slice(0, 60),
+      start: when(d.actual_start_date_time || d.start_time || d.start_date), end, activity, at };
+    await this.ctx.storage.put('w:' + ref, w);
+    if (!(await this.ctx.storage.getAlarm())) await this.ctx.storage.setAlarm(Date.now() + 10 * 60000);
     return json(200, { ok: true });
   }
-  /** Roadworks near a place (lat, lng, r = km, default 25), happening now or starting within 2 days. */
+  /** How many messages came in today (the free plan allows 100,000 requests a day for everything). */
+  smCount() {
+    const day = new Date().toISOString().slice(0, 10);
+    if (this.smDay !== day) { this.smDay = day; this.smToday = 0; }
+    this.smToday++;
+  }
+  async snsSigned(m) {
+    try {
+      const u = new URL(m.SigningCertURL);
+      if (u.protocol !== 'https:' || u.hostname !== 'sns.eu-west-2.amazonaws.com' || !/^\/SimpleNotificationService-\w+\.pem$/.test(u.pathname) || u.search) return false;
+      const keys = m.Type === 'Notification' ? ['Message', 'MessageId', 'Subject', 'Timestamp', 'TopicArn', 'Type']
+        : m.Type === 'SubscriptionConfirmation' ? ['Message', 'MessageId', 'SubscribeURL', 'Timestamp', 'Token', 'TopicArn', 'Type'] : null;
+      const alg = { 1: 'RSA-SHA1', 2: 'RSA-SHA256' }[m.SignatureVersion];
+      if (!keys || !alg) return false;
+      this.certs ||= {};
+      let pub = this.certs[u.href];
+      if (!pub) {
+        const r = await fetch(u); if (!r.ok) return false;
+        pub = this.certs[u.href] = new X509Certificate(await r.text()).publicKey;
+      }
+      const v = createVerify(alg);
+      v.update(keys.filter(k => m[k] != null).map(k => k + '\n' + m[k] + '\n').join(''));
+      return v.verify(pub, m.Signature, 'base64');
+    } catch (e) { console.log('signature check failed', e.message); return false; }
+  }
+  /** Roadworks happening now near a place (lat, lng, r = km, default 25). */
   roadworks(url) {
     const lat = num(url.searchParams.get('lat')), lng = num(url.searchParams.get('lng'));
     const r = Math.min(80, num(url.searchParams.get('r')) || 25);
     if (lat == null || lng == null) return json(400, { error: 'lat and lng please' });
     const now = Date.now(), out = [];
     for (const [ref, w] of Object.entries(this.works)) {
-      if (ref.startsWith('_') || !w.lat) continue;
-      if (w.end && w.end < now) continue;
-      if (w.start && w.start > now + 2 * 86400000) continue;
+      if ((w.start && w.start > now) || (w.activity && w.end && w.end < now)) continue;
       const dy = (w.lat - lat) * 111.2, dx = (w.lng - lng) * 111.2 * Math.cos(lat * Math.PI / 180);
-      if (Math.hypot(dx, dy) <= r) out.push(Object.assign({ id: ref }, w));
+      const km = Math.hypot(dx, dy);
+      if (km <= r) out.push(Object.assign({ id: ref, km: +km.toFixed(2) }, w));
     }
-    return json(200, { works: out.slice(0, 500), confirmed: !!this.works._confirmedAt });
+    out.sort((x, y) => x.km - y.km);
+    return json(200, { works: out.slice(0, 500), confirmed: !!this.sm.account, topics: Object.keys(this.sm.topics), today: this.smToday || 0 });
   }
 }
 
@@ -548,13 +581,21 @@ function publicShare(t) {
     startedAt: t.startedAt, updatedAt: t.updatedAt, endedAt: t.endedAt || null, arrived: !!t.arrived,
     events: (t.events || []).slice(-10), checkin: t.checkin || null, now: Date.now() };
 }
-/** The middle of a WKT shape (POINT, LINESTRING, POLYGON...): [easting, northing]. */
-function wktCentre(w) {
-  const nums = String(w).match(/-?\d+(\.\d+)?/g);
-  if (!nums || nums.length < 2) return null;
-  let e = 0, n = 0, c = 0;
-  for (let i = 0; i + 1 < nums.length; i += 2) { e += +nums[i]; n += +nums[i + 1]; c++; }
-  return c ? [e / c, n / c] : null;
+/** A point on a WKT shape: the point itself, the middle of a line, or the centre of an area: [easting, northing]. */
+function wktPoint(w) {
+  w = String(w || '');
+  const nums = (w.match(/-?\d+(\.\d+)?/g) || []).map(Number);
+  const pts = []; for (let i = 0; i + 1 < nums.length; i += 2) pts.push([nums[i], nums[i + 1]]);
+  if (!pts.length) return null;
+  if (/LINESTRING/.test(w) && pts.length > 1) {
+    const len = pts.slice(1).map((p, i) => Math.hypot(p[0] - pts[i][0], p[1] - pts[i][1]));
+    let half = len.reduce((x, y) => x + y, 0) / 2;
+    for (let i = 0; i < len.length; i++) {
+      if (half <= len[i]) { const k = len[i] ? half / len[i] : 0; return [pts[i][0] + (pts[i + 1][0] - pts[i][0]) * k, pts[i][1] + (pts[i + 1][1] - pts[i][1]) * k]; }
+      half -= len[i];
+    }
+  }
+  return [pts.reduce((x, p) => x + p[0], 0) / pts.length, pts.reduce((x, p) => x + p[1], 0) / pts.length];
 }
 /** British National Grid (OSGB36 easting/northing) to WGS84 lat/lng, good to a few metres. */
 function bngToWgs84(E, N) {
