@@ -289,6 +289,7 @@ export class Hub extends DurableObject {
     } else if (b.radio !== undefined) { t.radio = null; t.radioLogo = null; t.radioUrl = null; }
     if (b.battery && isFinite(+b.battery.pct)) t.battery = { pct: Math.max(0, Math.min(100, Math.round(+b.battery.pct))), charging: !!b.battery.charging,
       slow: !!b.battery.slow, saver: !!b.battery.saver, at: Date.now() };
+    t.parked = !!b.parked;   // the page checks less often while they're parked
     if (b.activity !== undefined) t.activity = ['driving', 'stopped', 'walking'].includes(b.activity) ? b.activity : null;
     const lat = num(b.lat), lng = num(b.lng);
     if (lat != null && lng != null && Math.abs(lat) <= 90 && Math.abs(lng) <= 180) {
@@ -314,7 +315,7 @@ export class Hub extends DurableObject {
     return json(200, { ok: true, url: '/t/' + id, needRoute: !!(t.dest && !t.route), needPhoto: !!b.wantPhoto && !t.photo,
       needRadioLogo: !!(t.radio && !t.radioLogo),
       inbox: inbox.map(x => ({ id: x.id, from: x.from, text: x.text, emote: x.emote, at: x.at })),
-      watching: !!(t.watchedAt && Date.now() - t.watchedAt < 15000) });
+      watching: !!(t.watchedAt && Date.now() - t.watchedAt < 35000) });
   }
 
   // ---------- street and town (OpenStreetMap's Nominatim, at most 1 a second, cached) ----------
@@ -575,7 +576,7 @@ function cleanRoute(r) {
 }
 function publicShare(t) {
   return { name: t.name, mood: t.mood, emoji: t.emoji, hasPhoto: !!t.photo, photoV: t.photoV || 0, lat: t.lat, lng: t.lng, heading: t.heading,
-    speed: t.speed, place: t.place || null, music: t.music || null, battery: t.battery || null,
+    speed: t.speed, place: t.place || null, music: t.music || null, battery: t.battery || null, parked: !!t.parked,
     radio: t.radio ? Object.assign({ hasLogo: !!t.radioLogo, logoV: t.radioLogoV || 0, canListen: !!t.radioUrl }, t.radio) : null,
     mode: 'car', activity: t.activity || null, dest: t.dest, stop: t.stop || null, eta: t.eta, remainingM: t.remainingM, route: t.route, routeV: t.routeV || 0, lastDest: t.lastDest || null,
     startedAt: t.startedAt, updatedAt: t.updatedAt, endedAt: t.endedAt || null, arrived: !!t.arrived,

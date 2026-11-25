@@ -823,8 +823,13 @@
       $('statusText').textContent = 'Reconnecting… (the server can take a minute to wake up)';
       $('dot').className = 'dot stale';
     }
-    setTimeout(poll, data && data.endedAt ? 10000 : 4000);
+    // moving or music playing: every 4 s; parked: 15 s; not sharing, or the page isn't on screen: 30 s
+    const tune = data && ((data.music && data.music.playing) || (data.radio && data.radio.playing));
+    clearTimeout(pollTimer);
+    pollTimer = setTimeout(poll, !data ? 4000 : data.endedAt || (document.hidden && !tune) ? 30000 : data.parked && !tune ? 15000 : 4000);
   }
+  let pollTimer = null;
+  document.addEventListener('visibilitychange', () => { if (!document.hidden && pollTimer) { clearTimeout(pollTimer); pollTimer = null; poll(); } });   // back on screen: up to date straight away
   // ---------- Street View strip: where they are, facing the way they're going (Google Maps Embed API) ----------
   let svAt = null, svHd = null, svT = 0;
   function streetView(d) {
