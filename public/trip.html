@@ -297,8 +297,8 @@
   <script src="/config.js"></script>
   <script>
   // TomTom map (same as the NaviGO app) when the server has a TomTom key, otherwise the Mapbox one
-  // Nick wants the TomTom look again (2026-11-20), same as the app
-  window.USE_TOMTOM = !!window.TOMTOM_KEY;
+  // Nick (26 Nov): the share page uses Mapbox again, like the app's new Mapbox map (TomTom only if there's no Mapbox key)
+  window.USE_TOMTOM = !window.MAPBOX_TOKEN && !!window.TOMTOM_KEY;
   document.write(window.USE_TOMTOM
     ? '<link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css"><script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"><\/script>'
     : '<script src="https://api.mapbox.com/mapbox-gl-js/v3.9.0/mapbox-gl.js"><\/script>');
