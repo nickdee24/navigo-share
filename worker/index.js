@@ -281,7 +281,9 @@ export class Hub extends DurableObject {
     t.emoji = String(b.emoji || '').slice(0, 16);
     if (b.music && b.music.title) {
       t.music = { title: String(b.music.title).slice(0, 80), artist: String(b.music.artist || '').slice(0, 60),
-        player: String(b.music.player || '').slice(0, 12), playing: !!b.music.playing, pos: num(b.music.pos), dur: num(b.music.dur), at: Date.now() };
+        player: String(b.music.player || '').slice(0, 12), playing: !!b.music.playing, pos: num(b.music.pos), dur: num(b.music.dur), at: Date.now(),
+        // a song playing inside NaviGO is a YouTube video: its id, so "Listen along" plays that exact video in time
+        videoId: /^[A-Za-z0-9_-]{11}$/.test(String(b.music.videoId || '')) ? String(b.music.videoId) : null };
     } else if (b.music !== undefined) t.music = null;
     if (b.radio && b.radio.name) {
       const name = String(b.radio.name).slice(0, 60);
@@ -435,6 +437,7 @@ export class Hub extends DurableObject {
   async shareYoutube(id) {
     const t = this.db.shares[id], mu = t && !t.endedAt && t.music;
     if (!mu || !mu.title) return json(404, { error: 'No song playing' });
+    if (mu.videoId) return json(200, { videoId: mu.videoId, title: mu.title });
     const ytKey = this.env.YOUTUBE_KEY || this.env.GOOGLE_MAPS_KEY;
     if (!ytKey) return json(503, { error: 'No YouTube key' });
     const key = (mu.artist || '') + '|' + mu.title;
